@@ -1,10 +1,20 @@
 __pycache__/
 .ipynb_checkpoints/
+.pytest_cache/
 .env
 .venv
 *.pyc
 .DS_Store
+.vscode/
+
+# Local datasets and generated analysis outputs
 data/*
 !data/.keep
+!data/README.md
+
+# Generated figures
 figures/*
+!figures/.keep
+
+# Large media files
 *.mp4

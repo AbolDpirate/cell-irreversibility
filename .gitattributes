@@ -1,0 +1,21 @@
+# Let Git detect text files and normalize them in the repository.
+* text=auto
+
+# Source code and project configuration use LF consistently.
+*.py text eol=lf
+*.ipynb text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
+
+# Windows PowerShell scripts may use CRLF.
+*.ps1 text eol=crlf
+
+# Binary files must never be modified as text.
+*.pdf binary
+*.docx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp4 binary

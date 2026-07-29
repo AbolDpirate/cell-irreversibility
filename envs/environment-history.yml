@@ -1,0 +1,12 @@
+﻿name: cell-irreversibility
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - matplotlib
+  - pytest
+  - numpy
+  - pandas
+  - scikit-learn
+  - jupyterlab
+prefix: C:\Users\Abolfazl.PH\miniconda3\envs\cell-irreversibility
