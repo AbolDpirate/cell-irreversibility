@@ -85,3 +85,62 @@ def test_multi_tau_summary(toy_tracks: pd.DataFrame) -> None:
     assert summary["n_steps"].tolist() == [4, 2]
     assert summary["n_cells"].tolist() == [2, 2]
     assert summary["median_tau_min"].tolist() == [20.0, 40.0]
+
+
+def test_missing_frame_is_not_mislabeled_as_tau1() -> None:
+    """
+    Frames 0 and 2 are two physical frames apart.
+
+    They must not be treated as a tau=1 displacement merely because
+    they are adjacent rows in the DataFrame.
+    """
+    tracks_with_gap = pd.DataFrame(
+        {
+            "cell_id": [1, 1],
+            "frame": [0, 2],
+            "t_min": [0.0, 40.0],
+            "x_um": [0.0, 3.0],
+            "y_um": [0.0, 1.0],
+        }
+    )
+
+    tau1_steps = compute_steps_for_tau(
+        tracks_with_gap,
+        tau_frames=1,
+    )
+
+    assert tau1_steps.empty
+
+    tau2_steps = compute_steps_for_tau(
+        tracks_with_gap,
+        tau_frames=2,
+    )
+
+    assert len(tau2_steps) == 1
+    assert tau2_steps["frame_start"].tolist() == [0]
+    assert tau2_steps["frame_end"].tolist() == [2]
+    assert tau2_steps["dx_um"].tolist() == [3.0]
+    assert tau2_steps["dy_um"].tolist() == [1.0]
+    assert tau2_steps["tau_min"].tolist() == [40.0]
+
+
+def test_duplicate_cell_frame_raises_error() -> None:
+    """One cell cannot have two observations in the same frame."""
+    duplicate_tracks = pd.DataFrame(
+        {
+            "cell_id": [1, 1],
+            "frame": [0, 0],
+            "t_min": [0.0, 0.0],
+            "x_um": [1.0, 1.5],
+            "y_um": [2.0, 2.5],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate cell_id-frame observations",
+    ):
+        compute_steps_for_tau(
+            duplicate_tracks,
+            tau_frames=1,
+        )

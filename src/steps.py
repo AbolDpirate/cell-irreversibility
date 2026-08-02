@@ -7,74 +7,162 @@ import pandas as pd
 REQUIRED_TRACK_COLS = {"cell_id", "frame", "t_min", "x_um", "y_um"}
 
 
+
+
 def validate_tracks(tracks: pd.DataFrame) -> None:
     """
-    Validate that the input tracks DataFrame has the required columns.
-    Raises ValueError with a clear message if something is missing.
+    Validate the cleaned trajectory table.
+
+    Required columns:
+        cell_id, frame, t_min, x_um, y_um
+
+    Each cell must have at most one observation in each frame.
     """
     missing = REQUIRED_TRACK_COLS - set(tracks.columns)
+
     if missing:
-        raise ValueError(f"tracks is missing required columns: {sorted(missing)}")
+        raise ValueError(
+            f"tracks is missing required columns: {sorted(missing)}"
+        )
+
+    duplicate_mask = tracks.duplicated(
+        subset=["cell_id", "frame"],
+        keep=False,
+    )
+
+    if duplicate_mask.any():
+        duplicate_pairs = (
+            tracks.loc[duplicate_mask, ["cell_id", "frame"]]
+            .drop_duplicates()
+            .head(5)
+            .to_dict(orient="records")
+        )
+
+        raise ValueError(
+            "tracks contains duplicate cell_id-frame observations. "
+            f"Examples: {duplicate_pairs}"
+        )
 
 
-def compute_steps_for_tau(tracks: pd.DataFrame, tau_frames: int) -> pd.DataFrame:
+def compute_steps_for_tau(
+    tracks: pd.DataFrame,
+    tau_frames: int,
+) -> pd.DataFrame:
     """
-    Compute displacement steps Δ for a given lag tau_frames.
+    Compute displacement steps for an exact physical frame lag.
 
-    Input 'tracks' must have columns:
-      cell_id (int), frame (int), t_min (float), x_um (float), y_um (float)
+    A step is included only when the same cell has observations at both:
 
-    Returns a DataFrame with one row per step:
-      cell_id, frame_start, t_start_min, frame_end, t_end_min, dx_um, dy_um,
-      tau_frames, tau_min
+        frame_start
+        frame_start + tau_frames
+
+    Missing intermediate frames do not cause the lag to be mislabeled.
     """
     validate_tracks(tracks)
 
     if tau_frames < 1:
         raise ValueError("tau_frames must be >= 1")
 
-    # Sort to ensure correct temporal order inside each cell_id
     tracks_sorted = (
-        tracks.sort_values(["cell_id", "frame"])
-              .reset_index(drop=True)
-              .copy()
+        tracks
+        .sort_values(["cell_id", "frame"])
+        .reset_index(drop=True)
+        .copy()
     )
 
-    # Group by trajectory (cell_id) and use shift to align t+tau next to t
-    g = tracks_sorted.groupby("cell_id", group_keys=False)
+    starts = (
+        tracks_sorted
+        .rename(
+            columns={
+                "frame": "frame_start",
+                "t_min": "t_start_min",
+                "x_um": "x_start_um",
+                "y_um": "y_start_um",
+            }
+        )
+        [
+            [
+                "cell_id",
+                "frame_start",
+                "t_start_min",
+                "x_start_um",
+                "y_start_um",
+            ]
+        ]
+        .copy()
+    )
 
-    x_future = g["x_um"].shift(-tau_frames)
-    y_future = g["y_um"].shift(-tau_frames)
-    t_future = g["t_min"].shift(-tau_frames)
-    f_future = g["frame"].shift(-tau_frames)
+    # Define the exact target frame.
+    starts["frame_end"] = (
+        starts["frame_start"] + int(tau_frames)
+    )
 
-    # Displacements
-    dx = x_future - tracks_sorted["x_um"]
-    dy = y_future - tracks_sorted["y_um"]
+    ends = (
+        tracks_sorted
+        .rename(
+            columns={
+                "frame": "frame_end",
+                "t_min": "t_end_min",
+                "x_um": "x_end_um",
+                "y_um": "y_end_um",
+            }
+        )
+        [
+            [
+                "cell_id",
+                "frame_end",
+                "t_end_min",
+                "x_end_um",
+                "y_end_um",
+            ]
+        ]
+        .copy()
+    )
 
-    steps = pd.DataFrame({
-        "cell_id": tracks_sorted["cell_id"].astype(int),
-        "frame_start": tracks_sorted["frame"].astype(int),
-        "t_start_min": tracks_sorted["t_min"].astype(float),
-        "frame_end": f_future,
-        "t_end_min": t_future,
-        "dx_um": dx,
-        "dy_um": dy,
-        "tau_frames": int(tau_frames),
-    })
+    # Match each starting observation to the same cell at the exact
+    # requested future frame.
+    steps = starts.merge(
+        ends,
+        on=["cell_id", "frame_end"],
+        how="inner",
+        validate="one_to_one",
+    )
 
-    # tau in minutes (computed from timestamps, robust if time step is not constant)
-    steps["tau_min"] = steps["t_end_min"] - steps["t_start_min"]
+    steps["dx_um"] = (
+        steps["x_end_um"] - steps["x_start_um"]
+    )
 
-    # Remove rows where the future point does not exist (end of each track)
-    steps = steps.dropna(subset=["dx_um", "dy_um", "frame_end", "t_end_min"]).copy()
+    steps["dy_um"] = (
+        steps["y_end_um"] - steps["y_start_um"]
+    )
 
-    # Fix dtypes after dropna
+    steps["tau_frames"] = int(tau_frames)
+
+    steps["tau_min"] = (
+        steps["t_end_min"] - steps["t_start_min"]
+    )
+
+    steps["cell_id"] = steps["cell_id"].astype(int)
+    steps["frame_start"] = steps["frame_start"].astype(int)
     steps["frame_end"] = steps["frame_end"].astype(int)
-    steps["t_end_min"] = steps["t_end_min"].astype(float)
 
-    return steps
+    output_columns = [
+        "cell_id",
+        "frame_start",
+        "t_start_min",
+        "frame_end",
+        "t_end_min",
+        "dx_um",
+        "dy_um",
+        "tau_frames",
+        "tau_min",
+    ]
 
+    return (
+        steps[output_columns]
+        .sort_values(["cell_id", "frame_start"])
+        .reset_index(drop=True)
+    )
 
 def compute_steps_multi_tau(tracks: pd.DataFrame, taus: list[int]) -> pd.DataFrame:
     """
