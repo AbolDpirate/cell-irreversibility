@@ -1,164 +1,228 @@
 # Time Irreversibility in Cell Motility
 
-This project investigates statistical time irreversibility in living cell motion using cell-tracking data. The main idea is to convert cell trajectories into displacement steps and compare the probability of forward steps, `p(Delta)`, with their mirrored counterparts, `p(-Delta)`. A difference between these distributions can indicate a statistical arrow of time and non-equilibrium behavior in cellular dynamics.
+A reproducible computational biophysics project for investigating directional asymmetry and time-irreversibility signatures in cell-migration trajectories.
 
-## Project Motivation
+The project uses microscopy-derived trajectories of mesenchymal stem cells and combines Python, statistical analysis, biophysics, automated testing, and reproducible research practices.
 
-Living cells consume energy and operate far from thermodynamic equilibrium. This project uses real microscopy-based cell trajectories to explore whether this non-equilibrium behavior can be detected from motion alone.
+> **Current status:** Phase 4 completed. The project is ready for Phase 5: probability-density estimation and displacement-asymmetry analysis.
 
-The core quantity of interest is an irreversibility index:
+---
 
-```text
-I_tau = < log( p(Delta_tau) / p(-Delta_tau) ) >
-```
+## Scientific Aim
 
-where `Delta_tau` is the displacement of a cell over a time lag `tau`.
+Living cells are active systems that continuously consume energy and operate far from thermodynamic equilibrium.
+
+This project asks whether their recorded motion contains statistical signatures that distinguish forward dynamics from appropriately reversed dynamics.
+
+For a cell trajectory \(\mathbf{r}(t)\), the displacement over a temporal lag \(\tau\) is
+
+\[
+\Delta_\tau \mathbf{r}(t)
+=
+\mathbf{r}(t+\tau)-\mathbf{r}(t).
+\]
+
+The project begins by studying asymmetries between observed displacement distributions and their inverted counterparts, while deliberately distinguishing simple directional asymmetry from stronger trajectory-level time irreversibility.
+
+Thermodynamic interpretations such as entropy production are deferred until the required time-reversal controls and statistical validation have been completed.
+
+---
 
 ## Dataset
 
-The project uses the **Fluo-C2DL-MSC** dataset from the **Cell Tracking Challenge (CTC)**, specifically sequence `01`.
+The analysis currently uses sequence `01` of the **Fluo-C2DL-MSC** dataset from the Cell Tracking Challenge.
 
-The dataset contains fluorescence microscopy images of mesenchymal stem cells. Cell positions were extracted from the raw image sequence using **Fiji / TrackMate**.
+Cell trajectories were extracted using Fiji / TrackMate.
 
-## Current Workflow
+Current calibration:
 
-### Phase 1 — Environment and Project Setup
+- Spatial resolution: `0.3 µm/pixel`
+- Temporal resolution: `20 min/frame`
+- Sequence length: `48 frames`
+- Primary cleaned dataset: `35 cell tracks`
 
-A reproducible Python project structure was created with:
+Processed biological data are kept locally and are not normally committed to the public repository.
 
-- `src/` for reusable Python modules
-- `notebooks/` for step-by-step analysis
-- `data/` for raw and processed data
-- `figures/` for generated plots
-- `tests/` for basic import tests
-- `env.yml` for the Conda environment
+---
 
-The main environment can be created with:
+## Current Analysis Pipeline
 
-```bash
-conda env create -f env.yml
-conda activate cell-irreversibility
+The project has completed the following stages:
+
+- **Phase 1:** reproducible Python/Conda project setup
+- **Phase 2:** TrackMate trajectory cleaning and standardization
+- **Phase 3:** multi-lag displacement computation
+- **Phase 4:** temporal-gap audit, exact-lag validation, common-motion analysis, and construction of a co-moving representation
+
+Displacements are currently calculated at:
+
+| Lag | Physical time | Exact steps |
+|---:|---:|---:|
+| 1 frame | 20 min | 433 |
+| 2 frames | 40 min | 398 |
+| 4 frames | 80 min | 343 |
+
+---
+
+## Important Phase 3 Correction
+
+An audit identified that the original displacement implementation used row-based shifting, which can assign the wrong physical lag when intermediate frames are missing.
+
+The pipeline was therefore redesigned to match observations using exact frame numbers:
+
+```python
+frame_end = frame_start + tau_frames
 ```
 
-### Phase 2 — Data Extraction and Cleaning
+Only observations belonging to the same cell at the exact requested endpoint frame are retained.
 
-The raw CTC image sequence was processed in **Fiji / TrackMate**.
-
-TrackMate settings included:
-
-- Detector: LoG detector
-- Estimated object diameter: 28 µm
-- Quality threshold: 2
-- Median filter: enabled
-- Sub-pixel localization: enabled
-- Tracker: Simple LAP tracker
-- Linking max distance: 8 µm
-- Gap-closing max distance: 15 µm
-- Gap-closing max frame gap: 2
-
-The raw TrackMate Spots CSV was cleaned with pandas into standardized trajectory files:
+The corrected implementation is contained in:
 
 ```text
-data/MSC01_tracks_clean.csv
-data/MSC01_tracks_clean_min10.csv
+src/steps.py
 ```
 
-The cleaned trajectory format is:
+and is protected by automated regression tests.
+
+---
+
+## Common Motion and Co-Moving Coordinates
+
+Phase 4 detected a population-level directional component, particularly along the x-axis.
+
+Because trajectory data alone cannot determine whether this reflects microscope drift, collective biological migration, or a mixture of both, the project does **not** automatically label it as technical drift.
+
+Instead, two parallel representations are retained:
 
 ```text
-cell_id, frame, t_min, x_um, y_um
+Raw trajectories
+Co-moving trajectories
 ```
 
-### Phase 3 — Displacement Step Computation
+The co-moving coordinates remove the frame-wise median population translation and are used as a sensitivity analysis.
 
-Cell trajectories were converted into displacement steps for:
+Future irreversibility results will therefore be compared between raw and co-moving data.
 
-```text
-tau = 1, 2, 4 frames
-```
-
-With a 20-minute frame interval, these correspond to:
-
-```text
-20, 40, and 80 minutes
-```
-
-The output step files include:
-
-```text
-data/MSC01_steps_tau124.csv
-data/MSC01_steps_tau1.csv
-data/MSC01_steps_tau2.csv
-data/MSC01_steps_tau4.csv
-data/MSC01_steps_summary_tau124.csv
-```
-
-Initial diagnostics showed likely image/stage drift, based on mean displacement scaling with lag time.
-
-### Current Status
-
-The project is currently at the beginning of **Phase 4**.
-
-Completed:
-
-- Project structure and Conda environment
-- TrackMate extraction from CTC sequence 01
-- Cleaning of raw TrackMate CSV
-- Construction of displacement steps for `tau = 1, 2, and 4`
-- Initial drift diagnostics
-
-Next steps:
-
-- Drift correction
-- Estimation of `p(Delta)` and `p(-Delta)`
-- Computation of `I_tau`
-- Sign-shuffle and time-reversal controls
-- Robustness checks for histogram binning and smoothing parameters
+---
 
 ## Repository Structure
 
 ```text
 cell-irreversibility/
-  data/
-  figures/
-  notebooks/
-  src/
-    io.py
-    steps.py
-    density.py
-    metrics.py
-    plots.py
-  tests/
-  env.yml
-  README.md
+│
+├── data/                 # local/raw and processed data
+├── envs/                 # environment snapshots
+├── figures/              # generated figures
+├── instructions/         # detailed project handbook
+├── notebooks/            # phase-specific analyses
+├── src/                  # reusable scientific code
+├── tests/                # automated tests
+├── env.yml               # Conda environment
+└── README.md
 ```
 
-## Main Python Dependencies
+Important notebooks currently include:
 
-- Python 3.11
-- numpy
-- pandas
-- matplotlib
-- scikit-learn
-- jupyterlab
-- pytest
-- ipykernel
+```text
+02_clean_spots_MSC01.ipynb
+03_compute_steps_MSC01.ipynb
+04_drift_validation_MSC01.ipynb
+```
 
-## Reproducibility
+Core source modules:
 
-To recreate the environment:
+```text
+src/io.py
+src/steps.py
+src/density.py
+src/metrics.py
+src/plots.py
+```
+
+---
+
+## Environment
+
+The validated development environment uses:
+
+```text
+Python 3.11.13
+NumPy
+pandas
+Matplotlib
+scikit-learn
+Jupyter / ipykernel
+pytest
+```
+
+Create the Conda environment with:
 
 ```bash
 conda env create -f env.yml
+```
+
+Activate it with:
+
+```bash
 conda activate cell-irreversibility
 ```
 
-To run basic tests:
+---
+
+## Tests
+
+Run the automated tests from the repository root:
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
-## Notes
+Current validated status:
 
-This is an active learning and research project. The current focus is on building a transparent, reproducible pipeline for extracting cell motion statistics and connecting them to concepts from non-equilibrium biophysics.
+```text
+9 passed
+```
+
+The tests include regression checks for exact physical frame lags, missing frames, duplicate cell-frame observations, multi-lag displacement calculations, and trajectory integrity.
+
+---
+
+## Detailed Documentation
+
+The complete scientific and educational record of the project is maintained in:
+
+**[Cell Motility Irreversibility Master Handbook](instructions/Cell_Motility_Irreversibility_Master_Handbook.pdf)**
+
+The handbook contains the detailed material intentionally omitted from this README, including:
+
+- full project history;
+- TrackMate workflow and data cleaning;
+- Python code and programming concepts;
+- mathematical derivations;
+- biophysical interpretation;
+- the exact-lag bug and its diagnosis;
+- Phase 4 common-motion analysis;
+- raw versus co-moving rationale;
+- reproducibility and environment setup;
+- automated testing;
+- Git/GitHub workflow;
+- scientific decisions and rejected alternatives;
+- and the roadmap for subsequent phases.
+
+---
+
+## Next Phase
+
+**Phase 5** will begin the main statistical asymmetry analysis, including:
+
+- displacement-density estimation;
+- comparison of \(p(\Delta)\) and \(p(-\Delta)\);
+- raw versus co-moving results;
+- uncertainty estimation and bootstrap confidence intervals;
+- and appropriate symmetry/time-reversal controls.
+
+---
+
+## Repository
+
+https://github.com/AbolDpirate/cell-irreversibility
