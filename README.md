@@ -1,20 +1,20 @@
 # Time Irreversibility in Cell Motility
 
-A reproducible computational biophysics project for exploring directional asymmetry and time-irreversibility signatures in cell-migration trajectories.
+A reproducible computational biophysics project for exploring directional asymmetry and time-reversal signatures in cell-migration trajectories.
 
-The project uses microscopy-derived trajectories of mesenchymal stem cells and is developed both as:
+The project is developed both as:
 
 - an exploratory scientific analysis; and
 - a structured learning project in Python, scientific computing, statistics, biophysics, reproducible research, testing, and Git/GitHub.
 
-> **Current status:** Phase 5 completed.  
-> **Next:** Phase 6 — ordered multi-step sequence analysis and trajectory-level time reversal.
+> **Current status:** Phase 6 completed.  
+> **Next:** Phase 7 — extending temporal irreversibility analysis beyond the current two-step feature representation.
 
 ---
 
 ## Scientific Aim
 
-Living cells are active systems that continuously consume energy and operate far from thermodynamic equilibrium.
+Living cells are active systems that continuously consume energy and operate away from thermodynamic equilibrium.
 
 This project asks whether experimentally measured cell trajectories contain statistical signatures that distinguish forward dynamics from appropriately reversed dynamics.
 
@@ -26,15 +26,9 @@ $$
 \mathbf{r}(t+\tau)-\mathbf{r}(t).
 $$
 
-The project first studies spatial inversion asymmetry by comparing the probability of an observed displacement with that of its inverted counterpart:
+The project progressively moves from single-displacement spatial asymmetry toward explicitly time-ordered trajectory analysis.
 
-$$
-p(\Delta \mathbf{r})
-\quad \text{vs.} \quad
-p(-\Delta \mathbf{r}).
-$$
-
-This is treated as an exploratory displacement-asymmetry analysis, not yet as definitive trajectory-level time irreversibility or thermodynamic entropy production.
+The current results are treated as exploratory and hypothesis-generating rather than as definitive measurements of biological entropy production or a thermodynamic arrow of time.
 
 ---
 
@@ -55,7 +49,7 @@ Raw and processed biological datasets are kept locally and are not normally comm
 
 ---
 
-## Current Analysis Pipeline
+## Project Progress
 
 Completed stages:
 
@@ -63,7 +57,16 @@ Completed stages:
 - **Phase 2:** TrackMate trajectory cleaning and standardization
 - **Phase 3:** exact-lag multi-scale displacement computation
 - **Phase 4:** temporal-gap audit, common-motion analysis, and co-moving coordinates
-- **Phase 5:** displacement distributions, density estimation, and spatial inversion-asymmetry analysis
+- **Phase 5:** displacement distributions and single-step spatial inversion asymmetry
+- **Phase 6:** ordered two-step sequence construction and exploratory time-reversal analysis
+
+---
+
+## Exact-Lag Displacements
+
+A previous audit identified that row-based shifting can produce incorrect physical lags when trajectory frames are missing.
+
+The authoritative implementation now matches trajectory endpoints using exact frame numbers.
 
 Current exact displacement counts are:
 
@@ -72,20 +75,6 @@ Current exact displacement counts are:
 | 1 frame | 20 min | 433 |
 | 2 frames | 40 min | 398 |
 | 4 frames | 80 min | 343 |
-
----
-
-## Exact-Lag Correction
-
-A Phase 4 audit identified that the original displacement implementation used row-based shifting, which can assign incorrect physical lags when trajectory frames are missing.
-
-The authoritative implementation now matches endpoints using exact frame numbers:
-
-```python
-frame_end = frame_start + tau_frames
-```
-
-and joins observations belonging to the same cell at the required endpoint frame.
 
 The corrected implementation is maintained in:
 
@@ -97,38 +86,50 @@ and protected by automated regression tests.
 
 ---
 
-## Raw and Co-Moving Trajectories
+## Raw and Co-Moving Representations
 
 A population-level common-motion component was detected, particularly along the x direction.
 
-Because trajectory data alone cannot establish whether this represents microscope drift, collective biological migration, or a combination of both, the project does not treat it as definitively technical drift.
+Trajectory data alone cannot establish whether this common motion represents microscope drift, collective biological migration, or a combination of both.
 
-Two representations are therefore retained:
+The project therefore retains two parallel representations:
 
 ```text
 Raw trajectories
 Co-moving trajectories
 ```
 
-The co-moving representation subtracts the frame-wise common population translation and is treated as a sensitivity analysis rather than an automatically superior dataset.
+The co-moving representation subtracts the frame-wise common population translation and is treated as a sensitivity representation rather than as an automatically superior reconstruction of the true cell motion.
 
 ---
 
-## Phase 5 — Displacement Asymmetry
+## Phase 5 — Single-Displacement Spatial Inversion
 
-Phase 5 characterized the empirical displacement distributions using:
+Phase 5 analyzed the empirical displacement distribution
 
-- normalized histograms;
-- Freedman-Diaconis data-driven binning;
-- one-dimensional kernel-density estimation;
-- two-dimensional KDE of `p(dx, dy)`;
-- comparison of `p(Delta)` with `p(-Delta)`;
-- KDE-bandwidth sensitivity;
+$$
+p(\Delta \mathbf{r})
+$$
+
+and compared it with
+
+$$
+p(-\Delta \mathbf{r}).
+$$
+
+The analysis used:
+
+- empirical histograms;
+- Freedman-Diaconis binning;
+- one-dimensional KDE;
+- two-dimensional KDE;
+- raw versus co-moving comparison;
+- bandwidth sensitivity;
 - cell-level bootstrap uncertainty;
 - an inversion-symmetrized null control;
-- and a sensitivity analysis for tracks with constant raw `y` coordinates.
+- and sensitivity analysis for constant-y tracks.
 
-The exploratory inversion-asymmetry quantity was based on
+The exploratory inversion-asymmetry quantity was
 
 $$
 I_\tau
@@ -149,10 +150,6 @@ Baseline estimates were:
 | 2 | 0.568 | 0.438 |
 | 4 | 0.793 | 0.542 |
 
-The raw representation showed greater inversion asymmetry than the co-moving representation at all three lags.
-
-This qualitative ordering remained unchanged when the KDE bandwidth was varied between `0.5×`, `1×`, and `2×` the baseline value, although the absolute numerical magnitude of the metric was bandwidth-dependent.
-
 A simple inversion-symmetrized null comparison found:
 
 | `tau` | Raw above null 95th percentile | Co-moving above null 95th percentile |
@@ -161,21 +158,151 @@ A simple inversion-symmetrized null comparison found:
 | 2 | Yes | Yes |
 | 4 | Yes | Yes |
 
-These results are interpreted as **exploratory evidence of single-displacement spatial inversion asymmetry**.
+These results were interpreted as exploratory evidence of **single-displacement spatial inversion asymmetry**.
 
-They do not establish full temporal irreversibility or entropy production.
+However, spatial inversion of a single displacement does not by itself test temporal ordering.
 
 ---
 
-## Data-Quality and Interpretation Note
+## Phase 6 — Ordered Sequence Time Reversal
 
-Exploratory diagnostics identified several tracks with constant raw `y` coordinates and some large overlapping multi-frame displacements.
+Phase 6 introduced explicit temporal ordering using exact two-step sequences constructed from three consecutive observations:
 
-These observations were retained in the primary analysis because the project is intended as an exploratory and educational scientific workflow rather than a publication-grade tracking-validation study.
+$$
+\mathbf{r}_t,
+\quad
+\mathbf{r}_{t+1},
+\quad
+\mathbf{r}_{t+2}.
+$$
 
-A sensitivity analysis excluding the constant-`y` tracks reduced the estimated asymmetry but did not remove the overall qualitative pattern.
+A forward sequence was defined as
 
-Known data limitations are therefore documented explicitly and incorporated into interpretation rather than treated as grounds for extensive forensic re-analysis.
+$$
+S =
+(\Delta \mathbf{r}_1,\Delta \mathbf{r}_2),
+$$
+
+with the correct time-reversed sequence
+
+$$
+R(S)
+=
+(-\Delta \mathbf{r}_2,-\Delta \mathbf{r}_1).
+$$
+
+The implementation was computationally validated to satisfy
+
+$$
+R(R(S))=S.
+$$
+
+A total of:
+
+```text
+392 exact two-step sequences
+32 contributing cells
+```
+
+were constructed for both the raw and co-moving trajectories.
+
+---
+
+## Phase 6 Feature Representation
+
+Direct density estimation in the full four-dimensional sequence space
+
+$$
+(\Delta x_1,\Delta y_1,\Delta x_2,\Delta y_2)
+$$
+
+would be relatively data-hungry for the available sample size.
+
+Phase 6 therefore used two interpretable time-odd sequence features:
+
+### Change in step magnitude
+
+$$
+\Delta m = m_2-m_1
+$$
+
+and a signed turning representation based on
+
+$$
+\sin(\theta).
+$$
+
+Under time reversal,
+
+$$
+(\Delta m,\sin\theta)
+\longrightarrow
+(-\Delta m,-\sin\theta).
+$$
+
+After requiring valid turning information in both raw and co-moving representations, the primary paired analysis used:
+
+```text
+365 sequences
+31 cells
+```
+
+---
+
+## Phase 6 Results
+
+The baseline KDE-based sequence asymmetry estimates were:
+
+| Representation | Sequence asymmetry (nats) |
+|---|---:|
+| Raw | 0.107 |
+| Co-moving | 0.189 |
+
+The absolute values were strongly bandwidth-dependent.
+
+The co-moving estimate was larger than the raw estimate across the tested bandwidths, but cell-level bootstrap uncertainty for the difference included zero:
+
+$$
+I_{\mathrm{comoving}}
+-
+I_{\mathrm{raw}}
+\approx
+[-0.033,\ 0.184]
+$$
+
+for the exploratory 95% bootstrap interval.
+
+Most importantly, the observed values were compared with a time-reversal-symmetrized null distribution.
+
+| Representation | Observed | Null mean | Null 95th percentile | Above null 95th? |
+|---|---:|---:|---:|:---:|
+| Raw | 0.107 | 0.191 | 0.264 | No |
+| Co-moving | 0.189 | 0.185 | 0.262 | No |
+
+Neither observed estimate exceeded the corresponding null 95th percentile.
+
+Therefore, within the current two-step feature representation and MSC01 dataset, Phase 6 did **not detect sequence-level time-reversal asymmetry beyond the finite-sample/KDE background**.
+
+This does not demonstrate that the underlying cell dynamics are time-reversible.
+
+It only means that the present two-step, two-feature analysis did not provide detectable evidence of irreversibility beyond the chosen null model.
+
+---
+
+## Scientific Interpretation
+
+The project currently supports two distinct observations:
+
+1. single-displacement spatial inversion asymmetry can be detected in parts of the Phase 5 analysis;
+2. the more temporally explicit Phase 6 sequence analysis did not exceed its finite-sample time-reversal-symmetrized null background.
+
+This distinction is scientifically important.
+
+A positive asymmetry estimator alone is not sufficient evidence for an arrow of time.
+
+Finite sample size, density estimation, representation choice, temporal resolution, sequence length, and dimensionality all affect what can be detected.
+
+The current results therefore remain exploratory and should not be interpreted as measurements of entropy production or definitive non-equilibrium thermodynamic quantities.
 
 ---
 
@@ -187,7 +314,7 @@ cell-irreversibility/
 ├── data/                 # local/raw and processed data
 ├── envs/                 # environment snapshots
 ├── figures/              # generated figures
-├── instructions/         # detailed project handbook
+├── instructions/         # detailed project handbooks
 ├── notebooks/            # phase-specific analyses
 ├── src/                  # reusable scientific code
 ├── tests/                # automated tests
@@ -195,16 +322,17 @@ cell-irreversibility/
 └── README.md
 ```
 
-Important notebooks currently include:
+Current notebooks include:
 
 ```text
 02_clean_spots_MSC01.ipynb
 03_compute_steps_MSC01.ipynb
 04_drift_validation_MSC01.ipynb
 05_displacement_density_MSC01.ipynb
+06_phase6_sequence_irreversibility_MSC01.ipynb
 ```
 
-Core source modules:
+Core source modules include:
 
 ```text
 src/io.py
@@ -245,7 +373,7 @@ conda activate cell-irreversibility
 
 ## Tests
 
-Run the automated tests from the repository root:
+Run the automated test suite from the repository root:
 
 ```bash
 python -m pytest -q
@@ -263,44 +391,45 @@ The test suite includes regression checks for exact physical frame lags, missing
 
 ## Detailed Documentation
 
-The full scientific and educational project record is maintained in:
+Detailed project documentation is maintained in the `instructions/` directory.
+
+### Phases 0–4
 
 **[Cell Motility Irreversibility Master Handbook](instructions/Cell_Motility_Irreversibility_Master_Handbook.pdf)**
 
-The handbook contains the details intentionally omitted from this README, including:
+### Phase 5
 
-- project history and scientific decisions;
-- TrackMate workflow and data cleaning;
-- Python and scientific-computing concepts;
-- mathematical and statistical derivations;
-- exact-lag debugging and validation;
-- common-motion and co-moving analysis;
-- density-estimation methodology;
-- bootstrap and null-control logic;
+**[Standalone Phase 5 Handbook](instructions/Cell_Motility_Irreversibility_Phase5_Standalone_Handbook.pdf)**
+
+The handbooks contain substantially more detail than this README, including:
+
+- project history;
+- code-level workflow;
+- mathematical derivations;
+- Python concepts;
+- statistical reasoning;
 - biophysical interpretation;
-- reproducibility and Git/GitHub workflow;
-- limitations and sensitivity analyses;
-- and the phase-by-phase project roadmap.
+- debugging and validation;
+- scientific decision points;
+- limitations;
+- sensitivity analyses;
+- reproducibility practices;
+- and continuation notes for later project phases.
 
 ---
 
 ## Next Phase
 
-Phase 6 will move beyond single-displacement spatial inversion and examine **ordered multi-step displacement sequences**.
+Phase 7 will investigate whether temporal information becomes more detectable when the analysis moves beyond the current reduced two-step representation.
 
-For example, a forward sequence
+Possible directions include:
 
-$$
-(\Delta_1,\Delta_2,\Delta_3)
-$$
+- richer representations of the original sequence coordinates;
+- longer ordered sequences;
+- alternative low-dimensional time-odd observables;
+- and methods that avoid direct high-dimensional KDE where appropriate.
 
-has the time-reversed counterpart
-
-$$
-(-\Delta_3,-\Delta_2,-\Delta_1).
-$$
-
-This introduces temporal ordering explicitly and therefore moves the project closer to a genuine analysis of the statistical arrow of time.
+The exact Phase 7 design will be chosen based on interpretability, sample size, and the educational scope of the project rather than by forcing a positive irreversibility result.
 
 ---
 
@@ -312,4 +441,4 @@ https://github.com/AbolDpirate/cell-irreversibility
 
 ## Status
 
-**Phase 5 completed. Phase 6 — sequence-level time reversal — is next.**
+**Phase 6 completed. Phase 7 is next.**
