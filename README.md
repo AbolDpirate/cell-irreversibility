@@ -5,10 +5,10 @@ A reproducible computational biophysics project for exploring directional asymme
 The project is developed both as:
 
 - an exploratory scientific analysis; and
-- a structured learning project in Python, scientific computing, statistics, biophysics, reproducible research, testing, and Git/GitHub.
+- a structured learning project in Python, scientific computing, statistics, biophysics, machine learning, reproducible research, testing, and Git/GitHub.
 
-> **Current status:** Phase 6 completed.  
-> **Next:** Phase 7 — extending temporal irreversibility analysis beyond the current two-step feature representation.
+> **Current status:** Phase 7 completed.  
+> **Next:** Phase 8 — extending temporal analysis beyond the present two-step sequence framework.
 
 ---
 
@@ -16,9 +16,9 @@ The project is developed both as:
 
 Living cells are active systems that continuously consume energy and operate away from thermodynamic equilibrium.
 
-This project asks whether experimentally measured cell trajectories contain statistical signatures that distinguish forward dynamics from appropriately reversed dynamics.
+This project asks whether experimentally measured cell trajectories contain statistical information that distinguishes forward dynamics from appropriately time-reversed dynamics.
 
-For a cell trajectory, the displacement over lag `tau` is
+For a cell trajectory, a displacement over lag `tau` is
 
 $$
 \Delta_\tau \mathbf{r}(t)
@@ -26,9 +26,9 @@ $$
 \mathbf{r}(t+\tau)-\mathbf{r}(t).
 $$
 
-The project progressively moves from single-displacement spatial asymmetry toward explicitly time-ordered trajectory analysis.
+The project progressively moves from single-displacement spatial asymmetry toward explicitly ordered trajectory analysis.
 
-The current results are treated as exploratory and hypothesis-generating rather than as definitive measurements of biological entropy production or a thermodynamic arrow of time.
+The current results are exploratory and should not be interpreted as direct measurements of entropy production or a thermodynamic arrow of time.
 
 ---
 
@@ -58,7 +58,8 @@ Completed stages:
 - **Phase 3:** exact-lag multi-scale displacement computation
 - **Phase 4:** temporal-gap audit, common-motion analysis, and co-moving coordinates
 - **Phase 5:** displacement distributions and single-step spatial inversion asymmetry
-- **Phase 6:** ordered two-step sequence construction and exploratory time-reversal analysis
+- **Phase 6:** ordered two-step sequence construction and reduced-feature time-reversal analysis
+- **Phase 7:** full-sequence forward/reverse classification with grouped cross-validation and time-reversal null controls
 
 ---
 
@@ -90,7 +91,11 @@ and protected by automated regression tests.
 
 A population-level common-motion component was detected, particularly along the x direction.
 
-Trajectory data alone cannot establish whether this common motion represents microscope drift, collective biological migration, or a combination of both.
+Trajectory data alone cannot establish whether this component represents:
+
+- microscope or stage drift;
+- collective biological migration;
+- or a combination of both.
 
 The project therefore retains two parallel representations:
 
@@ -99,7 +104,9 @@ Raw trajectories
 Co-moving trajectories
 ```
 
-The co-moving representation subtracts the frame-wise common population translation and is treated as a sensitivity representation rather than as an automatically superior reconstruction of the true cell motion.
+The co-moving representation subtracts frame-wise common population translation.
+
+It is treated as a sensitivity representation rather than as an automatically superior reconstruction of the true biological motion.
 
 ---
 
@@ -116,18 +123,6 @@ and compared it with
 $$
 p(-\Delta \mathbf{r}).
 $$
-
-The analysis used:
-
-- empirical histograms;
-- Freedman-Diaconis binning;
-- one-dimensional KDE;
-- two-dimensional KDE;
-- raw versus co-moving comparison;
-- bandwidth sensitivity;
-- cell-level bootstrap uncertainty;
-- an inversion-symmetrized null control;
-- and sensitivity analysis for constant-y tracks.
 
 The exploratory inversion-asymmetry quantity was
 
@@ -160,13 +155,13 @@ A simple inversion-symmetrized null comparison found:
 
 These results were interpreted as exploratory evidence of **single-displacement spatial inversion asymmetry**.
 
-However, spatial inversion of a single displacement does not by itself test temporal ordering.
+However, spatial inversion of an individual displacement does not by itself test temporal ordering.
 
 ---
 
-## Phase 6 — Ordered Sequence Time Reversal
+## Phase 6 — Ordered Two-Step Time Reversal
 
-Phase 6 introduced explicit temporal ordering using exact two-step sequences constructed from three consecutive observations:
+Phase 6 introduced explicit temporal ordering using three consecutive observations:
 
 $$
 \mathbf{r}_t,
@@ -176,133 +171,305 @@ $$
 \mathbf{r}_{t+2}.
 $$
 
-A forward sequence was defined as
+The ordered two-step sequence was defined as
 
 $$
-S =
-(\Delta \mathbf{r}_1,\Delta \mathbf{r}_2),
+S=
+(\Delta\mathbf{r}_1,\Delta\mathbf{r}_2),
 $$
 
-with the correct time-reversed sequence
+with time reversal
 
 $$
 R(S)
 =
-(-\Delta \mathbf{r}_2,-\Delta \mathbf{r}_1).
+(-\Delta\mathbf{r}_2,-\Delta\mathbf{r}_1).
 $$
 
-The implementation was computationally validated to satisfy
+The involution property
 
 $$
-R(R(S))=S.
+R(R(S))=S
 $$
 
-A total of:
+was computationally verified.
+
+The exact sequence dataset contained:
 
 ```text
-392 exact two-step sequences
-32 contributing cells
+392 two-step sequences
+32 cells
 ```
 
-were constructed for both the raw and co-moving trajectories.
-
----
-
-## Phase 6 Feature Representation
-
-Direct density estimation in the full four-dimensional sequence space
+Phase 6 used two interpretable time-odd features:
 
 $$
-(\Delta x_1,\Delta y_1,\Delta x_2,\Delta y_2)
+\Delta m=m_2-m_1
 $$
 
-would be relatively data-hungry for the available sample size.
-
-Phase 6 therefore used two interpretable time-odd sequence features:
-
-### Change in step magnitude
-
-$$
-\Delta m = m_2-m_1
-$$
-
-and a signed turning representation based on
+and
 
 $$
 \sin(\theta).
 $$
 
-Under time reversal,
-
-$$
-(\Delta m,\sin\theta)
-\longrightarrow
-(-\Delta m,-\sin\theta).
-$$
-
-After requiring valid turning information in both raw and co-moving representations, the primary paired analysis used:
+After requiring valid turning-angle information in both representations, the paired feature analysis contained:
 
 ```text
 365 sequences
 31 cells
 ```
 
----
+Baseline KDE asymmetry estimates were:
 
-## Phase 6 Results
-
-The baseline KDE-based sequence asymmetry estimates were:
-
-| Representation | Sequence asymmetry (nats) |
+| Representation | Sequence asymmetry |
 |---|---:|
 | Raw | 0.107 |
 | Co-moving | 0.189 |
 
-The absolute values were strongly bandwidth-dependent.
+However, neither observed value exceeded the corresponding time-reversal-symmetrized null 95th percentile.
 
-The co-moving estimate was larger than the raw estimate across the tested bandwidths, but cell-level bootstrap uncertainty for the difference included zero:
+Therefore, Phase 6 did **not detect sequence-level time-reversal asymmetry beyond the finite-sample/KDE background in the selected reduced representation**.
 
-$$
-I_{\mathrm{comoving}}
--
-I_{\mathrm{raw}}
-\approx
-[-0.033,\ 0.184]
-$$
-
-for the exploratory 95% bootstrap interval.
-
-Most importantly, the observed values were compared with a time-reversal-symmetrized null distribution.
-
-| Representation | Observed | Null mean | Null 95th percentile | Above null 95th? |
-|---|---:|---:|---:|:---:|
-| Raw | 0.107 | 0.191 | 0.264 | No |
-| Co-moving | 0.189 | 0.185 | 0.262 | No |
-
-Neither observed estimate exceeded the corresponding null 95th percentile.
-
-Therefore, within the current two-step feature representation and MSC01 dataset, Phase 6 did **not detect sequence-level time-reversal asymmetry beyond the finite-sample/KDE background**.
-
-This does not demonstrate that the underlying cell dynamics are time-reversible.
-
-It only means that the present two-step, two-feature analysis did not provide detectable evidence of irreversibility beyond the chosen null model.
+This result motivated Phase 7.
 
 ---
 
-## Scientific Interpretation
+## Phase 7 — Full-Sequence Classification
 
-The project currently supports two distinct observations:
+Phase 7 asked whether Phase 6 might have missed temporal information because the original four-dimensional sequence
 
-1. single-displacement spatial inversion asymmetry can be detected in parts of the Phase 5 analysis;
-2. the more temporally explicit Phase 6 sequence analysis did not exceed its finite-sample time-reversal-symmetrized null background.
+$$
+(\Delta x_1,\Delta y_1,\Delta x_2,\Delta y_2)
+$$
 
-This distinction is scientifically important.
+had been reduced to only two hand-designed features.
 
-A positive asymmetry estimator alone is not sufficient evidence for an arrow of time.
+The full two-step sequence was therefore retained.
 
-Finite sample size, density estimation, representation choice, temporal resolution, sequence length, and dimensionality all affect what can be detected.
+For every observed forward sequence,
 
-The current results therefore remain exploratory and should not be interpreted as measurements of entropy production or definitive non-equilibrium thermodynamic quantities.
+$$
+S,
+$$
+
+the correctly time-reversed sequence
+
+$$
+R(S)
+$$
+
+was generated.
+
+This produced a balanced classification dataset containing:
+
+```text
+392 forward sequences
+392 reversed sequences
+784 total classifier examples
+32 biological cells
+```
+
+Forward sequences were assigned label `1` and reversed sequences label `0`.
+
+---
+
+## Cell-Grouped Cross-Validation
+
+Sequences from the same cell are statistically related.
+
+A naive random train/test split could therefore leak information from individual biological cells between training and testing.
+
+Phase 7 used:
+
+```text
+5-fold GroupKFold
+```
+
+with `cell_id` as the grouping variable.
+
+All forward and reversed examples from a given cell remained in the same fold.
+
+Thus, when a cell was used for testing, no sequence from that cell appeared in the training data.
+
+---
+
+## Linear Classification
+
+The primary linear classifier was:
+
+```text
+StandardScaler
+      ↓
+LogisticRegression
+```
+
+Scaling was performed inside the scikit-learn pipeline so that preprocessing was fitted using training cells only.
+
+Mean grouped-cross-validation performance was:
+
+| Representation | Mean ROC AUC | Mean balanced accuracy |
+|---|---:|---:|
+| Raw | 0.622 | 0.614 |
+| Co-moving | 0.504 | 0.520 |
+
+The raw classifier initially appeared to contain detectable time-direction information.
+
+A paired time-reversal-symmetrized null analysis with 200 replicates gave:
+
+| Metric | Observed | Null mean | Null 95th percentile | Empirical upper-tail `p` |
+|---|---:|---:|---:|---:|
+| Raw ROC AUC | 0.622 | 0.500 | 0.556 | 0.005 |
+| Co-moving ROC AUC | 0.504 | 0.502 | 0.559 | 0.512 |
+
+The raw classifier therefore exceeded the paired null background, whereas the co-moving classifier did not.
+
+However, this result required further interpretation.
+
+---
+
+## Reversal-Odd / Reversal-Even Decomposition
+
+For a sequence
+
+$$
+S=(\mathbf d_1,\mathbf d_2),
+$$
+
+Phase 7 defined the reversal-odd coordinate
+
+$$
+\mathbf o
+=
+\mathbf d_1+\mathbf d_2
+$$
+
+and the reversal-even coordinate
+
+$$
+\mathbf e
+=
+\mathbf d_1-\mathbf d_2.
+$$
+
+Under time reversal,
+
+$$
+\mathbf o\rightarrow-\mathbf o,
+$$
+
+whereas
+
+$$
+\mathbf e\rightarrow\mathbf e.
+$$
+
+Importantly,
+
+$$
+\mathbf d_1+\mathbf d_2
+=
+\mathbf r_{t+2}-\mathbf r_t.
+$$
+
+Thus, the odd coordinate is simply the **net displacement across the two-step interval**.
+
+Linear classification produced:
+
+| Representation | Feature space | Mean ROC AUC |
+|---|---|---:|
+| Raw | Full 4D | 0.622 |
+| Raw | Odd net displacement | 0.622 |
+| Raw | Even step difference | 0.500 |
+| Co-moving | Full 4D | 0.504 |
+| Co-moving | Odd net displacement | 0.504 |
+| Co-moving | Even step difference | 0.500 |
+
+The full raw model and odd-only model were therefore essentially identical.
+
+This demonstrates that the significant raw linear classification signal was almost entirely explained by **net directional displacement**, rather than by richer two-step sequence ordering.
+
+The disappearance of this signal in the co-moving representation further indicates that common population motion contributes strongly to the raw classification result.
+
+---
+
+## Nonlinear Sensitivity Analysis
+
+One pre-specified nonlinear model was tested:
+
+```text
+StandardScaler
+      ↓
+RBF-SVM
+```
+
+No broad model search or aggressive hyperparameter optimization was performed.
+
+Observed performance was:
+
+| Representation | Feature space | Mean ROC AUC |
+|---|---|---:|
+| Raw | Full 4D | 0.557 |
+| Raw | Odd net displacement | 0.565 |
+| Co-moving | Full 4D | 0.348 |
+| Co-moving | Odd net displacement | 0.371 |
+
+The corresponding paired-null analysis produced:
+
+| Metric | Observed | Empirical upper-tail `p` |
+|---|---:|---:|
+| Raw full 4D | 0.557 | 0.075 |
+| Raw odd-only | 0.565 | 0.055 |
+| Raw full − odd | -0.008 | 0.602 |
+| Co-moving full 4D | 0.348 | 1.000 |
+| Co-moving odd-only | 0.371 | 1.000 |
+| Co-moving full − odd | -0.023 | 0.811 |
+
+The raw odd-only result was borderline relative to the estimated null 95th percentile but did not provide a robust empirical upper-tail result.
+
+Most importantly, the full four-dimensional representation did **not** outperform the odd net-displacement representation in either raw or co-moving trajectories.
+
+Below-chance co-moving RBF performance was retained as observed and was not post-hoc inverted.
+
+---
+
+## Phase 7 Interpretation
+
+Phase 7 found that:
+
+1. a linear classifier can distinguish raw forward and reversed sequences above the paired null background;
+2. almost all of that linear discrimination is reproduced by the reversal-odd net-displacement coordinate;
+3. the linear signal largely disappears after common-motion subtraction;
+4. reversal-even features alone contain no classification information, as expected;
+5. a nonlinear RBF classifier did not reveal convincing additional information in the full four-dimensional sequence;
+6. full-sequence RBF classification did not outperform net displacement alone.
+
+Therefore, Phase 7 does **not provide convincing evidence for intrinsic two-step sequence-order irreversibility beyond common directional motion**.
+
+The raw directional signal remains scientifically relevant, but trajectory data alone cannot determine whether the common-motion component reflects technical drift, collective migration, or both.
+
+The results also do not demonstrate that the underlying cell dynamics are time-reversible.
+
+They only show that the two-step analyses performed so far have not detected a robust sequence-order signal after accounting for common population motion and finite-sample null behavior.
+
+No entropy-production or thermodynamic-arrow interpretation is justified from these results alone.
+
+---
+
+## Machine Learning Scope
+
+Machine learning is used in this project as a scientific diagnostic rather than as the main objective.
+
+Phase 7 intentionally used only:
+
+- Logistic Regression as an interpretable linear baseline;
+- RBF-SVM as one predefined nonlinear sensitivity model;
+- cell-grouped cross-validation;
+- paired time-reversal null models.
+
+No broad model zoo, deep neural network, or result-driven hyperparameter search was used.
+
+This limits overfitting and reduces the risk of selecting a model simply because it produces a desirable result.
 
 ---
 
@@ -311,14 +478,14 @@ The current results therefore remain exploratory and should not be interpreted a
 ```text
 cell-irreversibility/
 │
-├── data/                 # local/raw and processed data
-├── envs/                 # environment snapshots
-├── figures/              # generated figures
-├── instructions/         # detailed project handbooks
-├── notebooks/            # phase-specific analyses
-├── src/                  # reusable scientific code
-├── tests/                # automated tests
-├── env.yml               # Conda environment
+├── data/
+├── envs/
+├── figures/
+├── instructions/
+├── notebooks/
+├── src/
+├── tests/
+├── env.yml
 └── README.md
 ```
 
@@ -330,6 +497,7 @@ Current notebooks include:
 04_drift_validation_MSC01.ipynb
 05_displacement_density_MSC01.ipynb
 06_phase6_sequence_irreversibility_MSC01.ipynb
+07_phase7_full_sequence_classification_MSC01.ipynb
 ```
 
 Core source modules include:
@@ -401,35 +569,42 @@ Detailed project documentation is maintained in the `instructions/` directory.
 
 **[Standalone Phase 5 Handbook](instructions/Cell_Motility_Irreversibility_Phase5_Standalone_Handbook.pdf)**
 
+### Phase 6
+
+**[Standalone Phase 6 Handbook](instructions/Cell_Motility_Irreversibility_Phase6_Standalone_Handbook.pdf)**
+
 The handbooks contain substantially more detail than this README, including:
 
 - project history;
-- code-level workflow;
+- code-level workflows;
 - mathematical derivations;
 - Python concepts;
 - statistical reasoning;
 - biophysical interpretation;
-- debugging and validation;
-- scientific decision points;
-- limitations;
+- validation procedures;
 - sensitivity analyses;
+- scientific decision points;
 - reproducibility practices;
 - and continuation notes for later project phases.
+
+A standalone Phase 7 handbook will be added after final Phase 7 documentation is completed.
 
 ---
 
 ## Next Phase
 
-Phase 7 will investigate whether temporal information becomes more detectable when the analysis moves beyond the current reduced two-step representation.
+Phase 8 will extend the temporal analysis beyond the present two-step framework.
 
 Possible directions include:
 
-- richer representations of the original sequence coordinates;
 - longer ordered sequences;
-- alternative low-dimensional time-odd observables;
-- and methods that avoid direct high-dimensional KDE where appropriate.
+- temporal-memory observables;
+- representations that separate directional motion from higher-order temporal structure;
+- and methods that remain statistically appropriate for the available number of cells and trajectories.
 
-The exact Phase 7 design will be chosen based on interpretability, sample size, and the educational scope of the project rather than by forcing a positive irreversibility result.
+The exact Phase 8 design will be selected before analysis rather than chosen in response to whether a particular method produces a positive result.
+
+Entropy-production and TUR-style interpretations remain deferred until the trajectory analysis provides sufficient evidence to justify such a thermodynamic connection.
 
 ---
 
@@ -441,4 +616,4 @@ https://github.com/AbolDpirate/cell-irreversibility
 
 ## Status
 
-**Phase 6 completed. Phase 7 is next.**
+**Phase 7 completed. Phase 8 is next.**
