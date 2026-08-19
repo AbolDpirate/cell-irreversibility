@@ -389,6 +389,7 @@ are maintained in `instructions/`.
 - [Phase 5 Standalone Handbook](instructions/Cell_Motility_Irreversibility_Phase5_Standalone_Handbook.pdf)
 - [Phase 6 Standalone Handbook](instructions/Cell_Motility_Irreversibility_Phase6_Standalone_Handbook.pdf)
 - [Phase 7 Standalone Handbook](instructions/Cell_Motility_Irreversibility_Phase7_Standalone_Handbook.pdf)
+- [Phase 8A Standalone Handbook](instructions/Cell_Motility_Irreversibility_Phase8A_Standalone_Handbook.pdf)
 
 The README is intentionally a project landing page; detailed cell-by-cell
 analysis belongs in the notebooks and standalone handbooks.
