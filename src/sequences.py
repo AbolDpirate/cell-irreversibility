@@ -372,3 +372,402 @@ def decompose_reversal_coordinates(
 
     return odd, even
 
+def _validate_n_steps(
+    n_steps,
+) -> int:
+    """
+    Validate and normalize a requested sequence length.
+    """
+
+    if (
+        isinstance(n_steps, bool)
+        or not isinstance(
+            n_steps,
+            (int, np.integer),
+        )
+    ):
+        raise ValueError(
+            "n_steps must be an integer >= 1."
+        )
+
+    n_steps = int(n_steps)
+
+    if n_steps < 1:
+        raise ValueError(
+            "n_steps must be an integer >= 1."
+        )
+
+    return n_steps
+
+
+def build_k_step_sequences(
+    tracks: pd.DataFrame,
+    n_steps: int,
+) -> pd.DataFrame:
+    """
+    Construct exact ordered displacement sequences
+    containing an arbitrary number of one-frame steps.
+
+    An n-step sequence requires observations at
+
+        t, t+1, ..., t+n
+
+    for the same cell.
+
+    Missing intermediate frames therefore prevent
+    construction of the sequence.
+    """
+
+    validate_tracks(tracks)
+
+    n_steps = _validate_n_steps(
+        n_steps
+    )
+
+    one_frame_steps = (
+        compute_steps_for_tau(
+            tracks,
+            tau_frames=1,
+        )
+    )
+
+    def frame_column(
+        position,
+    ):
+        if position == 0:
+            return "frame_start"
+
+        if position == n_steps:
+            return "frame_end"
+
+        return f"frame_{position}"
+
+    def time_column(
+        position,
+    ):
+        if position == 0:
+            return "t_start_min"
+
+        if position == n_steps:
+            return "t_end_min"
+
+        return f"t_{position}_min"
+
+    first_frame_column = (
+        frame_column(1)
+    )
+
+    first_time_column = (
+        time_column(1)
+    )
+
+    sequences = (
+        one_frame_steps
+        .rename(
+            columns={
+                "frame_end":
+                    first_frame_column,
+
+                "t_end_min":
+                    first_time_column,
+
+                "dx_um":
+                    "dx1_um",
+
+                "dy_um":
+                    "dy1_um",
+            }
+        )
+        [
+            [
+                "cell_id",
+                "frame_start",
+                "t_start_min",
+                first_frame_column,
+                first_time_column,
+                "dx1_um",
+                "dy1_um",
+            ]
+        ]
+        .copy()
+    )
+
+    for step_index in range(
+        2,
+        n_steps + 1,
+    ):
+
+        previous_frame_column = (
+            frame_column(
+                step_index - 1
+            )
+        )
+
+        current_frame_column = (
+            frame_column(
+                step_index
+            )
+        )
+
+        current_time_column = (
+            time_column(
+                step_index
+            )
+        )
+
+        next_steps = (
+            one_frame_steps
+            .rename(
+                columns={
+                    "frame_start":
+                        previous_frame_column,
+
+                    "frame_end":
+                        current_frame_column,
+
+                    "t_end_min":
+                        current_time_column,
+
+                    "dx_um":
+                        f"dx{step_index}_um",
+
+                    "dy_um":
+                        f"dy{step_index}_um",
+                }
+            )
+            [
+                [
+                    "cell_id",
+                    previous_frame_column,
+                    current_frame_column,
+                    current_time_column,
+                    f"dx{step_index}_um",
+                    f"dy{step_index}_um",
+                ]
+            ]
+            .copy()
+        )
+
+        sequences = sequences.merge(
+            next_steps,
+            on=[
+                "cell_id",
+                previous_frame_column,
+            ],
+            how="inner",
+            validate="one_to_one",
+        )
+
+    for position in range(
+        1,
+        n_steps + 1,
+    ):
+
+        expected_frame = (
+            sequences[
+                "frame_start"
+            ]
+            + position
+        )
+
+        observed_frame = (
+            sequences[
+                frame_column(
+                    position
+                )
+            ]
+        )
+
+        if not (
+            observed_frame
+            == expected_frame
+        ).all():
+            raise RuntimeError(
+                "Non-consecutive frames detected "
+                "inside a k-step sequence."
+            )
+
+    sequences[
+        "sequence_span_frames"
+    ] = (
+        sequences["frame_end"]
+        - sequences["frame_start"]
+    )
+
+    sequences[
+        "sequence_span_min"
+    ] = (
+        sequences["t_end_min"]
+        - sequences["t_start_min"]
+    )
+
+    metadata_columns = [
+        "cell_id",
+        "frame_start",
+        "t_start_min",
+    ]
+
+    for position in range(
+        1,
+        n_steps,
+    ):
+        metadata_columns.extend(
+            [
+                frame_column(
+                    position
+                ),
+                time_column(
+                    position
+                ),
+            ]
+        )
+
+    metadata_columns.extend(
+        [
+            "frame_end",
+            "t_end_min",
+        ]
+    )
+
+    component_columns = []
+
+    for step_index in range(
+        1,
+        n_steps + 1,
+    ):
+        component_columns.extend(
+            [
+                f"dx{step_index}_um",
+                f"dy{step_index}_um",
+            ]
+        )
+
+    output_columns = (
+        metadata_columns
+        + component_columns
+        + [
+            "sequence_span_frames",
+            "sequence_span_min",
+        ]
+    )
+
+    return (
+        sequences[
+            output_columns
+        ]
+        .sort_values(
+            [
+                "cell_id",
+                "frame_start",
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+
+def get_k_step_sequence_array(
+    sequences: pd.DataFrame,
+    n_steps: int,
+) -> np.ndarray:
+    """
+    Convert an n-step sequence table into an
+    (n_sequences, 2 * n_steps) NumPy array.
+
+    Column order is
+
+        dx1, dy1, dx2, dy2, ..., dxn, dyn.
+    """
+
+    n_steps = _validate_n_steps(
+        n_steps
+    )
+
+    component_columns = []
+
+    for step_index in range(
+        1,
+        n_steps + 1,
+    ):
+        component_columns.extend(
+            [
+                f"dx{step_index}_um",
+                f"dy{step_index}_um",
+            ]
+        )
+
+    missing_columns = (
+        set(component_columns)
+        - set(sequences.columns)
+    )
+
+    if missing_columns:
+        raise ValueError(
+            "Sequence table is missing "
+            f"components: "
+            f"{sorted(missing_columns)}"
+        )
+
+    return (
+        sequences[
+            component_columns
+        ]
+        .to_numpy(
+            dtype=float
+        )
+    )
+
+
+def reverse_k_step_sequences(
+    sequence_array: np.ndarray,
+) -> np.ndarray:
+    """
+    Apply exact time reversal to an arbitrary
+    ordered displacement sequence.
+
+    Forward:
+
+        (d1, d2, ..., dn)
+
+    Reversed:
+
+        (-dn, ..., -d2, -d1)
+    """
+
+    sequence_array = np.asarray(
+        sequence_array,
+        dtype=float,
+    )
+
+    if (
+        sequence_array.ndim != 2
+        or sequence_array.shape[1] < 2
+        or sequence_array.shape[1] % 2 != 0
+    ):
+        raise ValueError(
+            "Expected a two-dimensional array "
+            "with an even number of columns."
+        )
+
+    step_vectors = (
+        sequence_array.reshape(
+            sequence_array.shape[0],
+            -1,
+            2,
+        )
+    )
+
+    reversed_vectors = (
+        -step_vectors[
+            :,
+            ::-1,
+            :
+        ]
+    )
+
+    return (
+        reversed_vectors.reshape(
+            sequence_array.shape
+        )
+    )

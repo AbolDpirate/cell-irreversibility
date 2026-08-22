@@ -7,6 +7,9 @@ from src.sequences import (
     get_sequence_array,
     reverse_two_step_sequences,
     compute_two_step_features,
+    build_k_step_sequences,
+    get_k_step_sequence_array,
+    reverse_k_step_sequences,
 )
 
 
@@ -259,4 +262,389 @@ def test_reversal_coordinate_decomposition():
         forward_even,
     )
 
+
+def test_build_k_step_sequences_three_step_exact_continuity():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [
+                1,
+                1,
+                1,
+                1,
+                1,
+            ],
+            "frame": [
+                0,
+                1,
+                2,
+                3,
+                4,
+            ],
+            "t_min": [
+                0.0,
+                20.0,
+                40.0,
+                60.0,
+                80.0,
+            ],
+            "x_um": [
+                0.0,
+                1.0,
+                3.0,
+                6.0,
+                10.0,
+            ],
+            "y_um": [
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                2.0,
+            ],
+        }
+    )
+
+    sequences = (
+        build_k_step_sequences(
+            tracks,
+            n_steps=3,
+        )
+    )
+
+    assert len(sequences) == 2
+
+    assert (
+        sequences[
+            "frame_start"
+        ].tolist()
+        == [0, 1]
+    )
+
+    assert (
+        sequences[
+            "frame_1"
+        ].tolist()
+        == [1, 2]
+    )
+
+    assert (
+        sequences[
+            "frame_2"
+        ].tolist()
+        == [2, 3]
+    )
+
+    assert (
+        sequences[
+            "frame_end"
+        ].tolist()
+        == [3, 4]
+    )
+
+    assert (
+        sequences[
+            "sequence_span_frames"
+        ]
+        == 3
+    ).all()
+
+    assert np.allclose(
+        sequences[
+            "sequence_span_min"
+        ],
+        60.0,
+    )
+
+
+def test_build_k_step_sequences_rejects_missing_intermediate_frame():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [
+                1,
+                1,
+                1,
+                1,
+            ],
+            "frame": [
+                0,
+                1,
+                3,
+                4,
+            ],
+            "t_min": [
+                0.0,
+                20.0,
+                60.0,
+                80.0,
+            ],
+            "x_um": [
+                0.0,
+                1.0,
+                3.0,
+                4.0,
+            ],
+            "y_um": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        }
+    )
+
+    sequences = (
+        build_k_step_sequences(
+            tracks,
+            n_steps=3,
+        )
+    )
+
+    assert len(sequences) == 0
+
+
+def test_get_k_step_sequence_array_preserves_order():
+    sequences = pd.DataFrame(
+        {
+            "dx1_um": [1.0],
+            "dy1_um": [2.0],
+            "dx2_um": [3.0],
+            "dy2_um": [4.0],
+            "dx3_um": [5.0],
+            "dy3_um": [6.0],
+        }
+    )
+
+    result = (
+        get_k_step_sequence_array(
+            sequences,
+            n_steps=3,
+        )
+    )
+
+    assert result.shape == (
+        1,
+        6,
+    )
+
+    assert np.allclose(
+        result[0],
+        [
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+        ],
+    )
+
+
+def test_reverse_k_step_sequences_three_step_is_exact_involution():
+    forward = np.array(
+        [
+            [
+                1.0,
+                2.0,
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+            ],
+            [
+                -1.0,
+                3.0,
+                2.0,
+                -4.0,
+                7.0,
+                1.0,
+            ],
+        ]
+    )
+
+    reversed_array = (
+        reverse_k_step_sequences(
+            forward
+        )
+    )
+
+    expected = np.array(
+        [
+            [
+                -5.0,
+                -6.0,
+                -3.0,
+                -4.0,
+                -1.0,
+                -2.0,
+            ],
+            [
+                -7.0,
+                -1.0,
+                -2.0,
+                4.0,
+                1.0,
+                -3.0,
+            ],
+        ]
+    )
+
+    assert np.allclose(
+        reversed_array,
+        expected,
+    )
+
+    double_reversed = (
+        reverse_k_step_sequences(
+            reversed_array
+        )
+    )
+
+    assert np.allclose(
+        double_reversed,
+        forward,
+    )
+
+
+def test_k_step_helpers_reject_invalid_inputs():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [1],
+            "frame": [0],
+            "t_min": [0.0],
+            "x_um": [0.0],
+            "y_um": [0.0],
+        }
+    )
+
+    with pytest.raises(
+        ValueError
+    ):
+        build_k_step_sequences(
+            tracks,
+            n_steps=0,
+        )
+
+    with pytest.raises(
+        ValueError
+    ):
+        build_k_step_sequences(
+            tracks,
+            n_steps=2.5,
+        )
+
+    with pytest.raises(
+        ValueError
+    ):
+        reverse_k_step_sequences(
+            np.array(
+                [
+                    [
+                        1.0,
+                        2.0,
+                        3.0,
+                    ]
+                ]
+            )
+        )
+
+def test_generic_two_step_builder_matches_historical_builder():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [
+                1,
+                1,
+                1,
+                1,
+                2,
+                2,
+                2,
+            ],
+            "frame": [
+                0,
+                1,
+                2,
+                3,
+                0,
+                1,
+                3,
+            ],
+            "t_min": [
+                0.0,
+                20.0,
+                40.0,
+                60.0,
+                0.0,
+                20.0,
+                60.0,
+            ],
+            "x_um": [
+                0.0,
+                1.0,
+                3.0,
+                6.0,
+                10.0,
+                11.0,
+                15.0,
+            ],
+            "y_um": [
+                0.0,
+                0.5,
+                1.0,
+                2.0,
+                5.0,
+                6.0,
+                8.0,
+            ],
+        }
+    )
+
+    historical = (
+        build_two_step_sequences(
+            tracks
+        )
+    )
+
+    generic = (
+        build_k_step_sequences(
+            tracks,
+            n_steps=2,
+        )
+    )
+
+    historical_array = (
+        get_sequence_array(
+            historical
+        )
+    )
+
+    generic_array = (
+        get_k_step_sequence_array(
+            generic,
+            n_steps=2,
+        )
+    )
+
+    assert len(generic) == len(
+        historical
+    )
+
+    assert np.array_equal(
+        generic["cell_id"].to_numpy(),
+        historical["cell_id"].to_numpy(),
+    )
+
+    assert np.array_equal(
+        generic["frame_start"].to_numpy(),
+        historical["frame_start"].to_numpy(),
+    )
+
+    assert np.array_equal(
+        generic["frame_end"].to_numpy(),
+        historical["frame_end"].to_numpy(),
+    )
+
+    assert np.allclose(
+        generic_array,
+        historical_array,
+    )
 
