@@ -771,3 +771,167 @@ def reverse_k_step_sequences(
             sequence_array.shape
         )
     )
+
+def decompose_three_step_parity(
+    sequence_array: np.ndarray,
+):
+    """
+    Decompose exact three-step displacement sequences
+    into reversal-parity coordinates.
+
+    Input column order:
+
+        dx1, dy1, dx2, dy2, dx3, dy3
+
+    Returns:
+
+        net_odd
+            n = d1 + d2 + d3
+
+        internal_odd
+            q = d1 - 2*d2 + d3
+
+        reversal_even
+            e = d1 - d3
+
+    Each returned array has shape:
+
+        (n_sequences, 2)
+    """
+
+    sequence_array = np.asarray(
+        sequence_array,
+        dtype=float,
+    )
+
+    if (
+        sequence_array.ndim != 2
+        or sequence_array.shape[1] != 6
+    ):
+        raise ValueError(
+            "Expected a two-dimensional "
+            "three-step sequence array "
+            "with exactly 6 columns."
+        )
+
+    step_vectors = (
+        sequence_array.reshape(
+            sequence_array.shape[0],
+            3,
+            2,
+        )
+    )
+
+    d1 = step_vectors[:, 0, :]
+    d2 = step_vectors[:, 1, :]
+    d3 = step_vectors[:, 2, :]
+
+    net_odd = (
+        d1
+        + d2
+        + d3
+    )
+
+    internal_odd = (
+        d1
+        - 2.0 * d2
+        + d3
+    )
+
+    reversal_even = (
+        d1
+        - d3
+    )
+
+    return (
+        net_odd,
+        internal_odd,
+        reversal_even,
+    )
+
+
+def reconstruct_three_step_from_parity(
+    net_odd: np.ndarray,
+    internal_odd: np.ndarray,
+    reversal_even: np.ndarray,
+) -> np.ndarray:
+    """
+    Reconstruct the original three-step sequence
+    from the parity coordinates n, q, and e.
+
+    The inverse transformation is
+
+        d2 = (n - q) / 3
+
+        d1 = (2*n + q + 3*e) / 6
+
+        d3 = (2*n + q - 3*e) / 6
+
+    Returns an array with column order
+
+        dx1, dy1, dx2, dy2, dx3, dy3.
+    """
+
+    net_odd = np.asarray(
+        net_odd,
+        dtype=float,
+    )
+
+    internal_odd = np.asarray(
+        internal_odd,
+        dtype=float,
+    )
+
+    reversal_even = np.asarray(
+        reversal_even,
+        dtype=float,
+    )
+
+    expected_shape = (
+        net_odd.shape
+    )
+
+    if (
+        net_odd.ndim != 2
+        or net_odd.shape[1] != 2
+    ):
+        raise ValueError(
+            "Parity coordinate arrays must "
+            "have shape (n_sequences, 2)."
+        )
+
+    if (
+        internal_odd.shape
+        != expected_shape
+        or reversal_even.shape
+        != expected_shape
+    ):
+        raise ValueError(
+            "All parity coordinate arrays "
+            "must have identical shapes."
+        )
+
+    d2 = (
+        net_odd
+        - internal_odd
+    ) / 3.0
+
+    d1 = (
+        2.0 * net_odd
+        + internal_odd
+        + 3.0 * reversal_even
+    ) / 6.0
+
+    d3 = (
+        2.0 * net_odd
+        + internal_odd
+        - 3.0 * reversal_even
+    ) / 6.0
+
+    return np.column_stack(
+        [
+            d1,
+            d2,
+            d3,
+        ]
+    )

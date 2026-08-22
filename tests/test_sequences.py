@@ -10,6 +10,8 @@ from src.sequences import (
     build_k_step_sequences,
     get_k_step_sequence_array,
     reverse_k_step_sequences,
+    decompose_three_step_parity,
+    reconstruct_three_step_from_parity,
 )
 
 
@@ -646,5 +648,271 @@ def test_generic_two_step_builder_matches_historical_builder():
     assert np.allclose(
         generic_array,
         historical_array,
+    )
+
+def test_three_step_parity_coordinates_match_manual_values():
+    forward = np.array(
+        [
+            [
+                1.0,
+                2.0,
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+            ]
+        ]
+    )
+
+    (
+        net_odd,
+        internal_odd,
+        reversal_even,
+    ) = decompose_three_step_parity(
+        forward
+    )
+
+    assert np.allclose(
+        net_odd,
+        [
+            [
+                9.0,
+                12.0,
+            ]
+        ],
+    )
+
+    assert np.allclose(
+        internal_odd,
+        [
+            [
+                0.0,
+                0.0,
+            ]
+        ],
+    )
+
+    assert np.allclose(
+        reversal_even,
+        [
+            [
+                -4.0,
+                -4.0,
+            ]
+        ],
+    )
+
+def test_three_step_parity_transforms_correctly_under_reversal():
+    forward = np.array(
+        [
+            [
+                1.0,
+                2.0,
+                3.0,
+                -1.0,
+                4.0,
+                5.0,
+            ],
+            [
+                -2.0,
+                1.0,
+                0.5,
+                3.0,
+                7.0,
+                -4.0,
+            ],
+        ]
+    )
+
+    reversed_array = (
+        reverse_k_step_sequences(
+            forward
+        )
+    )
+
+    (
+        n_forward,
+        q_forward,
+        e_forward,
+    ) = decompose_three_step_parity(
+        forward
+    )
+
+    (
+        n_reverse,
+        q_reverse,
+        e_reverse,
+    ) = decompose_three_step_parity(
+        reversed_array
+    )
+
+    assert np.allclose(
+        n_reverse,
+        -n_forward,
+    )
+
+    assert np.allclose(
+        q_reverse,
+        -q_forward,
+    )
+
+    assert np.allclose(
+        e_reverse,
+        e_forward,
+    )
+
+def test_three_step_parity_decomposition_is_invertible():
+    forward = np.array(
+        [
+            [
+                1.0,
+                2.0,
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+            ],
+            [
+                -2.0,
+                0.5,
+                7.0,
+                -3.0,
+                1.5,
+                9.0,
+            ],
+        ]
+    )
+
+    (
+        net_odd,
+        internal_odd,
+        reversal_even,
+    ) = decompose_three_step_parity(
+        forward
+    )
+
+    reconstructed = (
+        reconstruct_three_step_from_parity(
+            net_odd,
+            internal_odd,
+            reversal_even,
+        )
+    )
+
+    assert reconstructed.shape == (
+        2,
+        6,
+    )
+
+    assert np.allclose(
+        reconstructed,
+        forward,
+    )
+
+def test_three_step_parity_helpers_reject_invalid_shapes():
+    with pytest.raises(
+        ValueError
+    ):
+        decompose_three_step_parity(
+            np.array(
+                [
+                    [
+                        1.0,
+                        2.0,
+                        3.0,
+                        4.0,
+                    ]
+                ]
+            )
+        )
+
+    with pytest.raises(
+        ValueError
+    ):
+        reconstruct_three_step_from_parity(
+            np.zeros((3, 2)),
+            np.zeros((4, 2)),
+            np.zeros((3, 2)),
+        )
+
+    with pytest.raises(
+        ValueError
+    ):
+        reconstruct_three_step_from_parity(
+            np.zeros((3, 3)),
+            np.zeros((3, 3)),
+            np.zeros((3, 3)),
+        )
+
+def test_three_step_net_odd_equals_endpoint_displacement():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [
+                1,
+                1,
+                1,
+                1,
+            ],
+            "frame": [
+                0,
+                1,
+                2,
+                3,
+            ],
+            "t_min": [
+                0.0,
+                20.0,
+                40.0,
+                60.0,
+            ],
+            "x_um": [
+                2.0,
+                3.5,
+                6.0,
+                10.0,
+            ],
+            "y_um": [
+                -1.0,
+                0.0,
+                2.0,
+                5.0,
+            ],
+        }
+    )
+
+    sequences = (
+        build_k_step_sequences(
+            tracks,
+            n_steps=3,
+        )
+    )
+
+    sequence_array = (
+        get_k_step_sequence_array(
+            sequences,
+            n_steps=3,
+        )
+    )
+
+    (
+        net_odd,
+        internal_odd,
+        reversal_even,
+    ) = decompose_three_step_parity(
+        sequence_array
+    )
+
+    expected_endpoint_displacement = np.array(
+        [
+            [
+                10.0 - 2.0,
+                5.0 - (-1.0),
+            ]
+        ]
+    )
+
+    assert np.allclose(
+        net_odd,
+        expected_endpoint_displacement,
     )
 
