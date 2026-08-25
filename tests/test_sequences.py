@@ -12,6 +12,8 @@ from src.sequences import (
     reverse_k_step_sequences,
     decompose_three_step_parity,
     reconstruct_three_step_from_parity,
+    decompose_four_step_parity,
+    reconstruct_four_step_from_parity,
 )
 
 
@@ -915,4 +917,259 @@ def test_three_step_net_odd_equals_endpoint_displacement():
         net_odd,
         expected_endpoint_displacement,
     )
+
+def test_four_step_parity_coordinates_match_manual_values():
+    forward = np.array(
+        [
+            [
+                1.0, 2.0,
+                3.0, 4.0,
+                5.0, 6.0,
+                7.0, 8.0,
+            ]
+        ]
+    )
+
+    (
+        net_odd,
+        internal_odd,
+        even_outer,
+        even_inner,
+    ) = decompose_four_step_parity(
+        forward
+    )
+
+    assert np.allclose(
+        net_odd,
+        [[16.0, 20.0]],
+    )
+
+    assert np.allclose(
+        internal_odd,
+        [[0.0, 0.0]],
+    )
+
+    assert np.allclose(
+        even_outer,
+        [[-6.0, -6.0]],
+    )
+
+    assert np.allclose(
+        even_inner,
+        [[-2.0, -2.0]],
+    )
+
+
+def test_four_step_parity_transforms_correctly_under_reversal():
+    forward = np.array(
+        [
+            [
+                1.0, 2.0,
+                3.0, -1.0,
+                4.0, 5.0,
+                -2.0, 7.0,
+            ],
+            [
+                -2.0, 1.0,
+                0.5, 3.0,
+                7.0, -4.0,
+                2.0, 8.0,
+            ],
+        ]
+    )
+
+    reversed_array = (
+        reverse_k_step_sequences(
+            forward
+        )
+    )
+
+    forward_parity = (
+        decompose_four_step_parity(
+            forward
+        )
+    )
+
+    reverse_parity = (
+        decompose_four_step_parity(
+            reversed_array
+        )
+    )
+
+    (
+        n_forward,
+        q_forward,
+        e1_forward,
+        e2_forward,
+    ) = forward_parity
+
+    (
+        n_reverse,
+        q_reverse,
+        e1_reverse,
+        e2_reverse,
+    ) = reverse_parity
+
+    assert np.allclose(
+        n_reverse,
+        -n_forward,
+    )
+
+    assert np.allclose(
+        q_reverse,
+        -q_forward,
+    )
+
+    assert np.allclose(
+        e1_reverse,
+        e1_forward,
+    )
+
+    assert np.allclose(
+        e2_reverse,
+        e2_forward,
+    )
+
+
+def test_four_step_parity_decomposition_is_invertible():
+    forward = np.array(
+        [
+            [
+                1.0, 2.0,
+                3.0, 4.0,
+                5.0, 6.0,
+                7.0, 8.0,
+            ],
+            [
+                -2.0, 0.5,
+                7.0, -3.0,
+                1.5, 9.0,
+                4.0, -6.0,
+            ],
+        ]
+    )
+
+    parity = (
+        decompose_four_step_parity(
+            forward
+        )
+    )
+
+    reconstructed = (
+        reconstruct_four_step_from_parity(
+            *parity
+        )
+    )
+
+    assert reconstructed.shape == (
+        2,
+        8,
+    )
+
+    assert np.allclose(
+        reconstructed,
+        forward,
+    )
+
+
+def test_four_step_net_odd_equals_endpoint_displacement():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [
+                1, 1, 1, 1, 1
+            ],
+            "frame": [
+                0, 1, 2, 3, 4
+            ],
+            "t_min": [
+                0.0,
+                20.0,
+                40.0,
+                60.0,
+                80.0,
+            ],
+            "x_um": [
+                2.0,
+                3.0,
+                5.0,
+                8.0,
+                12.0,
+            ],
+            "y_um": [
+                -1.0,
+                0.0,
+                2.0,
+                5.0,
+                7.0,
+            ],
+        }
+    )
+
+    sequences = (
+        build_k_step_sequences(
+            tracks,
+            n_steps=4,
+        )
+    )
+
+    sequence_array = (
+        get_k_step_sequence_array(
+            sequences,
+            n_steps=4,
+        )
+    )
+
+    (
+        net_odd,
+        _,
+        _,
+        _,
+    ) = decompose_four_step_parity(
+        sequence_array
+    )
+
+    expected = np.array(
+        [
+            [
+                12.0 - 2.0,
+                7.0 - (-1.0),
+            ]
+        ]
+    )
+
+    assert np.allclose(
+        net_odd,
+        expected,
+    )
+
+
+def test_four_step_parity_helpers_reject_invalid_shapes():
+    with pytest.raises(
+        ValueError
+    ):
+        decompose_four_step_parity(
+            np.zeros(
+                (2, 6)
+            )
+        )
+
+    with pytest.raises(
+        ValueError
+    ):
+        reconstruct_four_step_from_parity(
+            np.zeros((3, 2)),
+            np.zeros((4, 2)),
+            np.zeros((3, 2)),
+            np.zeros((3, 2)),
+        )
+
+    with pytest.raises(
+        ValueError
+    ):
+        reconstruct_four_step_from_parity(
+            np.zeros((3, 3)),
+            np.zeros((3, 3)),
+            np.zeros((3, 3)),
+            np.zeros((3, 3)),
+        )
 

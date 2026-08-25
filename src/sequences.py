@@ -935,3 +935,189 @@ def reconstruct_three_step_from_parity(
             d3,
         ]
     )
+
+def decompose_four_step_parity(
+    sequence_array: np.ndarray,
+):
+    """
+    Decompose exact four-step displacement sequences
+    into pre-specified reversal-parity coordinates.
+
+    Input column order:
+
+        dx1, dy1, dx2, dy2,
+        dx3, dy3, dx4, dy4
+
+    Returns:
+
+        net_odd
+            n4 = d1 + d2 + d3 + d4
+
+        internal_odd
+            q4 = d1 - d2 - d3 + d4
+
+        even_outer
+            e41 = d1 - d4
+
+        even_inner
+            e42 = d2 - d3
+
+    Every returned array has shape:
+
+        (n_sequences, 2)
+    """
+
+    sequence_array = np.asarray(
+        sequence_array,
+        dtype=float,
+    )
+
+    if (
+        sequence_array.ndim != 2
+        or sequence_array.shape[1] != 8
+    ):
+        raise ValueError(
+            "Expected a two-dimensional "
+            "four-step sequence array "
+            "with exactly 8 columns."
+        )
+
+    step_vectors = sequence_array.reshape(
+        sequence_array.shape[0],
+        4,
+        2,
+    )
+
+    d1 = step_vectors[:, 0, :]
+    d2 = step_vectors[:, 1, :]
+    d3 = step_vectors[:, 2, :]
+    d4 = step_vectors[:, 3, :]
+
+    net_odd = (
+        d1
+        + d2
+        + d3
+        + d4
+    )
+
+    internal_odd = (
+        d1
+        - d2
+        - d3
+        + d4
+    )
+
+    even_outer = (
+        d1
+        - d4
+    )
+
+    even_inner = (
+        d2
+        - d3
+    )
+
+    return (
+        net_odd,
+        internal_odd,
+        even_outer,
+        even_inner,
+    )
+
+
+def reconstruct_four_step_from_parity(
+    net_odd: np.ndarray,
+    internal_odd: np.ndarray,
+    even_outer: np.ndarray,
+    even_inner: np.ndarray,
+) -> np.ndarray:
+    """
+    Reconstruct the original four-step sequence
+    from n4, q4, e41, and e42.
+
+    Returns:
+
+        dx1, dy1, dx2, dy2,
+        dx3, dy3, dx4, dy4
+    """
+
+    arrays = [
+        np.asarray(
+            array,
+            dtype=float,
+        )
+        for array in (
+            net_odd,
+            internal_odd,
+            even_outer,
+            even_inner,
+        )
+    ]
+
+    (
+        net_odd,
+        internal_odd,
+        even_outer,
+        even_inner,
+    ) = arrays
+
+    if (
+        net_odd.ndim != 2
+        or net_odd.shape[1] != 2
+    ):
+        raise ValueError(
+            "Parity coordinate arrays must "
+            "have shape (n_sequences, 2)."
+        )
+
+    expected_shape = (
+        net_odd.shape
+    )
+
+    if any(
+        array.shape != expected_shape
+        for array in arrays[1:]
+    ):
+        raise ValueError(
+            "All parity coordinate arrays "
+            "must have identical shapes."
+        )
+
+    outer_sum = (
+        net_odd
+        + internal_odd
+    ) / 2.0
+
+    inner_sum = (
+        net_odd
+        - internal_odd
+    ) / 2.0
+
+    d1 = (
+        outer_sum
+        + even_outer
+    ) / 2.0
+
+    d4 = (
+        outer_sum
+        - even_outer
+    ) / 2.0
+
+    d2 = (
+        inner_sum
+        + even_inner
+    ) / 2.0
+
+    d3 = (
+        inner_sum
+        - even_inner
+    ) / 2.0
+
+    return np.column_stack(
+        [
+            d1,
+            d2,
+            d3,
+            d4,
+        ]
+    )
