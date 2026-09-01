@@ -98,3 +98,99 @@ def analytic_epr_rotational_ou(
 
     return float(2.0 * omega**2 / k)
 
+def ou_transition_matrix(
+    k: float,
+    omega: float,
+    dt: float,
+) -> np.ndarray:
+    """Return the exact finite-time transition matrix of the 2D OU process.
+
+    For
+
+        A = -k I + omega R,
+
+    the exact transition over time interval dt is
+
+        F = exp(A dt)
+          = exp(-k dt) Rot(omega dt).
+
+    Parameters
+    ----------
+    k
+        Positive restoring-rate parameter.
+    omega
+        Rotational driving rate.
+    dt
+        Positive time interval.
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2x2 exact transition matrix.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if dt <= 0:
+        raise ValueError("dt must be positive.")
+
+    decay = np.exp(-k * dt)
+    angle = omega * dt
+
+    rotation = np.array(
+        [
+            [np.cos(angle), -np.sin(angle)],
+            [np.sin(angle), np.cos(angle)],
+        ],
+        dtype=float,
+    )
+
+    return decay * rotation
+
+
+def ou_transition_covariance(
+    k: float,
+    diffusion: float,
+    dt: float,
+) -> np.ndarray:
+    """Return the exact finite-time transition-noise covariance.
+
+    For
+
+        dX = A X dt + sqrt(2D) dW,
+
+    with the isotropic rotational drift matrix,
+
+        Q(dt)
+        = (D / k) * (1 - exp(-2 k dt)) * I.
+
+    Parameters
+    ----------
+    k
+        Positive restoring-rate parameter.
+    diffusion
+        Positive scalar diffusion coefficient D.
+    dt
+        Positive time interval.
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2x2 transition covariance matrix.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if diffusion <= 0:
+        raise ValueError("diffusion must be positive.")
+
+    if dt <= 0:
+        raise ValueError("dt must be positive.")
+
+    variance = (
+        diffusion
+        / k
+        * (1.0 - np.exp(-2.0 * k * dt))
+    )
+
+    return variance * np.eye(2, dtype=float)
