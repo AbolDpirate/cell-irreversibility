@@ -3,10 +3,12 @@ import pytest
 
 from src.thermo import (
     analytic_epr_rotational_ou,
+    analytic_mean_rotational_increment,
     ou_drift_matrix,
     ou_transition_covariance,
     ou_transition_matrix,
     rotation_generator,
+    rotational_increments,
     simulate_rotational_ou,
     stationary_covariance_isotropic,
 )
@@ -381,5 +383,64 @@ def test_invalid_simulation_arguments_are_rejected():
             diffusion=1.0,
             dt=0.1,
             x0=np.array([1.0, 2.0, 3.0]),
+        )
+
+def test_rotational_increments_have_expected_sign_for_simple_path():
+    path = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 0.0],
+        ]
+    )
+
+    increments = rotational_increments(path)
+
+    np.testing.assert_allclose(
+        increments,
+        np.array([1.0, 1.0]),
+    )
+
+
+def test_equilibrium_mean_rotational_increment_is_zero():
+    expected = analytic_mean_rotational_increment(
+        k=1.0,
+        omega=0.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    assert expected == pytest.approx(0.0)
+
+
+def test_mean_rotational_increment_changes_sign_with_rotation_direction():
+    positive = analytic_mean_rotational_increment(
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    negative = analytic_mean_rotational_increment(
+        k=1.0,
+        omega=-1.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    assert positive > 0.0
+    assert negative < 0.0
+    assert positive == pytest.approx(-negative)
+
+
+def test_invalid_rotational_increment_path_is_rejected():
+    with pytest.raises(ValueError):
+        rotational_increments(
+            np.array([1.0, 2.0])
+        )
+
+    with pytest.raises(ValueError):
+        rotational_increments(
+            np.array([[1.0, np.nan], [2.0, 3.0]])
         )
 

@@ -318,3 +318,84 @@ def simulate_rotational_ou(
 
     return path
 
+def rotational_increments(
+    path: np.ndarray,
+) -> np.ndarray:
+    """Return signed rotational increments between successive 2D states.
+
+    For successive states
+
+        X_t     = (x_t, y_t)
+        X_{t+1} = (x_{t+1}, y_{t+1}),
+
+    the signed rotational increment is
+
+        c_t = x_t * y_{t+1} - y_t * x_{t+1}.
+
+    Positive values correspond to counterclockwise orientation.
+    Negative values correspond to clockwise orientation.
+
+    This quantity is a probability-current observable, not an
+    entropy-production estimator.
+    """
+    path_array = np.asarray(
+        path,
+        dtype=float,
+    )
+
+    if (
+        path_array.ndim != 2
+        or path_array.shape[1] != 2
+        or path_array.shape[0] < 2
+    ):
+        raise ValueError(
+            "path must have shape (n_states, 2) with at least two states."
+        )
+
+    if not np.all(np.isfinite(path_array)):
+        raise ValueError("path must contain only finite values.")
+
+    current = path_array[:-1]
+    following = path_array[1:]
+
+    return (
+        current[:, 0] * following[:, 1]
+        - current[:, 1] * following[:, 0]
+    )
+
+
+def analytic_mean_rotational_increment(
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+) -> float:
+    """Return the stationary mean signed rotational increment.
+
+    For the exactly sampled isotropic rotational OU process,
+
+        E[c_t]
+        = (2D / k)
+          * exp(-k dt)
+          * sin(omega dt).
+
+    This is a discrete-time rotational-current observable and must not
+    be interpreted as the physical entropy-production rate.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if diffusion <= 0:
+        raise ValueError("diffusion must be positive.")
+
+    if dt <= 0:
+        raise ValueError("dt must be positive.")
+
+    return float(
+        2.0
+        * diffusion
+        / k
+        * np.exp(-k * dt)
+        * np.sin(omega * dt)
+    )
+
