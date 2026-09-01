@@ -7,6 +7,7 @@ from src.thermo import (
     ou_transition_covariance,
     ou_transition_matrix,
     rotation_generator,
+    simulate_rotational_ou,
     stationary_covariance_isotropic,
 )
 
@@ -247,5 +248,138 @@ def test_invalid_transition_time_is_rejected():
             k=1.0,
             diffusion=1.0,
             dt=-0.1,
+        )
+
+def test_simulated_ou_path_has_expected_shape_and_finite_values():
+    path = simulate_rotational_ou(
+        n_steps=20,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+        seed=2031,
+    )
+
+    assert path.shape == (21, 2)
+    assert np.all(np.isfinite(path))
+
+
+def test_simulation_is_reproducible_for_fixed_seed():
+    path_a = simulate_rotational_ou(
+        n_steps=25,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+        seed=2031,
+    )
+
+    path_b = simulate_rotational_ou(
+        n_steps=25,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+        seed=2031,
+    )
+
+    np.testing.assert_allclose(
+        path_a,
+        path_b,
+    )
+
+
+def test_supplied_initial_state_is_preserved():
+    x0 = np.array(
+        [1.25, -0.75],
+        dtype=float,
+    )
+
+    path = simulate_rotational_ou(
+        n_steps=10,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+        seed=2031,
+        x0=x0,
+    )
+
+    np.testing.assert_allclose(
+        path[0],
+        x0,
+    )
+
+
+def test_one_step_simulation_matches_exact_transition_law():
+    k = 1.0
+    omega = 0.8
+    diffusion = 0.7
+    dt = 0.2
+    seed = 1234
+
+    x0 = np.array(
+        [0.4, -1.1],
+        dtype=float,
+    )
+
+    path = simulate_rotational_ou(
+        n_steps=1,
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+        seed=seed,
+        x0=x0,
+    )
+
+    transition = ou_transition_matrix(
+        k=k,
+        omega=omega,
+        dt=dt,
+    )
+
+    transition_covariance = ou_transition_covariance(
+        k=k,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    rng = np.random.default_rng(seed)
+
+    expected_noise = rng.multivariate_normal(
+        mean=np.zeros(2),
+        cov=transition_covariance,
+    )
+
+    expected_next = (
+        transition @ x0
+        + expected_noise
+    )
+
+    np.testing.assert_allclose(
+        path[1],
+        expected_next,
+    )
+
+
+def test_invalid_simulation_arguments_are_rejected():
+    with pytest.raises(ValueError):
+        simulate_rotational_ou(
+            n_steps=0,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+        )
+
+    with pytest.raises(ValueError):
+        simulate_rotational_ou(
+            n_steps=10,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+            x0=np.array([1.0, 2.0, 3.0]),
         )
 
