@@ -20,6 +20,9 @@ from src.thermo import (
     projected_scalar_covariance_matrix,
     projected_scalar_path_log_ratio,
     zero_mean_gaussian_log_density,
+    donsker_varadhan_lower_bound,
+    make_quadratic_logistic_critic,
+    stable_log_mean_exp,
 )
 
 
@@ -883,5 +886,138 @@ def test_invalid_projected_scalar_inputs_are_rejected():
             omega=1.0,
             diffusion=1.0,
             dt=0.1,
+        )
+
+def test_stable_log_mean_exp_matches_direct_calculation_on_safe_values():
+    scores = np.array(
+        [-1.0, 0.0, 1.0],
+        dtype=float,
+    )
+
+    observed = stable_log_mean_exp(
+        scores
+    )
+
+    expected = np.log(
+        np.mean(
+            np.exp(scores)
+        )
+    )
+
+    assert observed == pytest.approx(
+        expected
+    )
+
+
+def test_stable_log_mean_exp_remains_finite_for_large_scores():
+    scores = np.array(
+        [1000.0, 1001.0, 999.0],
+        dtype=float,
+    )
+
+    observed = stable_log_mean_exp(
+        scores
+    )
+
+    assert np.isfinite(observed)
+
+
+def test_dv_lower_bound_recovers_exact_discrete_toy_kl():
+    log_three = np.log(3.0)
+
+    forward_scores = np.array(
+        [
+            log_three,
+            log_three,
+            log_three,
+            -log_three,
+        ],
+        dtype=float,
+    )
+
+    reverse_scores = np.array(
+        [
+            log_three,
+            -log_three,
+            -log_three,
+            -log_three,
+        ],
+        dtype=float,
+    )
+
+    observed = donsker_varadhan_lower_bound(
+        forward_scores=forward_scores,
+        reverse_scores=reverse_scores,
+    )
+
+    expected_kl = 0.5 * log_three
+
+    assert observed == pytest.approx(
+        expected_kl
+    )
+
+
+def test_dv_lower_bound_is_invariant_to_additive_critic_shift():
+    forward_scores = np.array(
+        [0.2, 0.8, 1.1, -0.3],
+        dtype=float,
+    )
+
+    reverse_scores = np.array(
+        [-0.4, 0.1, 0.3, -0.8],
+        dtype=float,
+    )
+
+    original = donsker_varadhan_lower_bound(
+        forward_scores=forward_scores,
+        reverse_scores=reverse_scores,
+    )
+
+    shift = 17.5
+
+    shifted = donsker_varadhan_lower_bound(
+        forward_scores=(
+            forward_scores + shift
+        ),
+        reverse_scores=(
+            reverse_scores + shift
+        ),
+    )
+
+    assert shifted == pytest.approx(
+        original
+    )
+
+
+def test_fixed_quadratic_logistic_critic_matches_prespecification():
+    critic = make_quadratic_logistic_critic()
+
+    polynomial = critic.named_steps[
+        "polynomial"
+    ]
+
+    logistic = critic.named_steps[
+        "logistic"
+    ]
+
+    assert polynomial.degree == 2
+    assert polynomial.include_bias is False
+    assert logistic.max_iter == 3000
+
+
+def test_invalid_dv_inputs_are_rejected():
+    with pytest.raises(ValueError):
+        stable_log_mean_exp(
+            np.array([])
+        )
+
+    with pytest.raises(ValueError):
+        donsker_varadhan_lower_bound(
+            forward_scores=np.array(
+                [1.0, np.nan]
+            ),
+            reverse_scores=np.array(
+                [0.0, 1.0]
+            ),
         )
 

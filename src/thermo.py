@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 
 def rotation_generator() -> np.ndarray:
@@ -900,4 +903,131 @@ def projected_scalar_path_log_ratio(
     )
 
     return float(forward - reverse)
+
+def stable_log_mean_exp(
+    scores: np.ndarray,
+) -> float:
+    """Compute log(mean(exp(scores))) in a numerically stable way."""
+    scores_array = np.asarray(
+        scores,
+        dtype=float,
+    )
+
+    if scores_array.ndim != 1:
+        raise ValueError(
+            "scores must be one-dimensional."
+        )
+
+    if scores_array.size == 0:
+        raise ValueError(
+            "scores must not be empty."
+        )
+
+    if not np.all(np.isfinite(scores_array)):
+        raise ValueError(
+            "scores must contain only finite values."
+        )
+
+    maximum = np.max(scores_array)
+
+    return float(
+        maximum
+        + np.log(
+            np.mean(
+                np.exp(
+                    scores_array - maximum
+                )
+            )
+        )
+    )
+
+
+def donsker_varadhan_lower_bound(
+    forward_scores: np.ndarray,
+    reverse_scores: np.ndarray,
+) -> float:
+    """Evaluate the empirical Donsker-Varadhan KL lower bound.
+
+    For critic T,
+
+        D_KL(P || Q)
+        >= E_P[T] - log(E_Q[exp(T)]).
+
+    Here forward_scores are critic values evaluated on samples from P,
+    and reverse_scores are critic values evaluated on samples from Q.
+    """
+    forward_array = np.asarray(
+        forward_scores,
+        dtype=float,
+    )
+
+    reverse_array = np.asarray(
+        reverse_scores,
+        dtype=float,
+    )
+
+    if (
+        forward_array.ndim != 1
+        or reverse_array.ndim != 1
+    ):
+        raise ValueError(
+            "forward_scores and reverse_scores must be one-dimensional."
+        )
+
+    if (
+        forward_array.size == 0
+        or reverse_array.size == 0
+    ):
+        raise ValueError(
+            "forward_scores and reverse_scores must not be empty."
+        )
+
+    if (
+        not np.all(np.isfinite(forward_array))
+        or not np.all(np.isfinite(reverse_array))
+    ):
+        raise ValueError(
+            "critic scores must contain only finite values."
+        )
+
+    return float(
+        np.mean(forward_array)
+        - stable_log_mean_exp(reverse_array)
+    )
+
+
+def make_quadratic_logistic_critic() -> Pipeline:
+    """Construct the fixed Phase 9 variational critic.
+
+    The architecture is pre-specified as:
+
+        PolynomialFeatures(degree=2, include_bias=False)
+            ->
+        StandardScaler()
+            ->
+        LogisticRegression(max_iter=3000)
+
+    No hyperparameter optimization is performed.
+    """
+    return Pipeline(
+        steps=[
+            (
+                "polynomial",
+                PolynomialFeatures(
+                    degree=2,
+                    include_bias=False,
+                ),
+            ),
+            (
+                "scaler",
+                StandardScaler(),
+            ),
+            (
+                "logistic",
+                LogisticRegression(
+                    max_iter=3000,
+                ),
+            ),
+        ]
+    )
 
