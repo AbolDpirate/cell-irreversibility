@@ -570,3 +570,169 @@ def analytic_sampled_path_irreversibility_rate(
     return float(
         numerator / denominator
     )
+
+def reverse_state_path(
+    path: np.ndarray,
+) -> np.ndarray:
+    """Return the time-reversed order of a 2D state path.
+
+    For a position path
+
+        (x_0, x_1, ..., x_N),
+
+    the reversed path is
+
+        (x_N, x_{N-1}, ..., x_0).
+
+    Position is even under time reversal, so the state values themselves
+    are not sign-flipped; only their temporal order is reversed.
+    """
+    path_array = np.asarray(
+        path,
+        dtype=float,
+    )
+
+    if (
+        path_array.ndim != 2
+        or path_array.shape[1] != 2
+        or path_array.shape[0] < 2
+    ):
+        raise ValueError(
+            "path must have shape (n_states, 2) with at least two states."
+        )
+
+    if not np.all(np.isfinite(path_array)):
+        raise ValueError(
+            "path must contain only finite values."
+        )
+
+    return path_array[::-1].copy()
+
+
+def ou_path_log_probability(
+    path: np.ndarray,
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+) -> float:
+    """Return the stationary log probability of a complete OU path.
+
+    The path probability is
+
+        P[path]
+        = pi(x_0)
+          * product_t p(x_{t+1} | x_t),
+
+    where pi is the stationary state density and the transition density
+    is the exact finite-time Gaussian OU transition.
+    """
+    path_array = np.asarray(
+        path,
+        dtype=float,
+    )
+
+    if (
+        path_array.ndim != 2
+        or path_array.shape[1] != 2
+        or path_array.shape[0] < 2
+    ):
+        raise ValueError(
+            "path must have shape (n_states, 2) with at least two states."
+        )
+
+    if not np.all(np.isfinite(path_array)):
+        raise ValueError(
+            "path must contain only finite values."
+        )
+
+    transition = ou_transition_matrix(
+        k=k,
+        omega=omega,
+        dt=dt,
+    )
+
+    transition_covariance = ou_transition_covariance(
+        k=k,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    variance = transition_covariance[0, 0]
+
+    current_states = path_array[:-1]
+    next_states = path_array[1:]
+
+    conditional_means = (
+        current_states @ transition.T
+    )
+
+    residuals = (
+        next_states - conditional_means
+    )
+
+    squared_residual_norms = np.sum(
+        residuals**2,
+        axis=1,
+    )
+
+    transition_log_probabilities = (
+        -np.log(2.0 * np.pi * variance)
+        - 0.5
+        * squared_residual_norms
+        / variance
+    )
+
+    initial_log_probability = (
+        stationary_log_density_isotropic(
+            state=path_array[0],
+            k=k,
+            diffusion=diffusion,
+        )
+    )
+
+    return float(
+        initial_log_probability
+        + transition_log_probabilities.sum()
+    )
+
+
+def ou_path_log_ratio(
+    path: np.ndarray,
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+) -> float:
+    """Return log P[path] - log P[reversed path].
+
+    This quantity is the forward-versus-reversed path log-probability
+    ratio for the exactly sampled stationary OU process.
+    """
+    forward_log_probability = (
+        ou_path_log_probability(
+            path=path,
+            k=k,
+            omega=omega,
+            diffusion=diffusion,
+            dt=dt,
+        )
+    )
+
+    reversed_path = reverse_state_path(path)
+
+    reversed_log_probability = (
+        ou_path_log_probability(
+            path=reversed_path,
+            k=k,
+            omega=omega,
+            diffusion=diffusion,
+            dt=dt,
+        )
+    )
+
+    return float(
+        forward_log_probability
+        - reversed_log_probability
+    )
+

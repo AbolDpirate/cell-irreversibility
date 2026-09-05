@@ -6,9 +6,12 @@ from src.thermo import (
     analytic_mean_rotational_increment,
     analytic_sampled_path_irreversibility_rate,
     ou_drift_matrix,
+    ou_path_log_probability,
+    ou_path_log_ratio,
     ou_transition_covariance,
     ou_transition_log_density,
     ou_transition_matrix,
+    reverse_state_path,
     rotation_generator,
     rotational_increments,
     simulate_rotational_ou,
@@ -572,4 +575,208 @@ def test_finite_sampling_reduces_observable_irreversibility():
 
     assert sampled > 0.0
     assert sampled < continuous
+
+def test_reversing_state_path_twice_returns_original():
+    path = np.array(
+        [
+            [0.2, -0.4],
+            [1.0, 0.3],
+            [-0.6, 0.8],
+            [0.1, 1.2],
+        ],
+        dtype=float,
+    )
+
+    reversed_twice = reverse_state_path(
+        reverse_state_path(path)
+    )
+
+    np.testing.assert_allclose(
+        reversed_twice,
+        path,
+    )
+
+
+def test_path_log_probability_matches_manual_transition_sum():
+    path = np.array(
+        [
+            [0.3, -0.2],
+            [0.8, 0.1],
+            [0.4, 0.7],
+        ],
+        dtype=float,
+    )
+
+    k = 1.0
+    omega = 0.6
+    diffusion = 0.9
+    dt = 0.2
+
+    observed = ou_path_log_probability(
+        path=path,
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    expected = stationary_log_density_isotropic(
+        state=path[0],
+        k=k,
+        diffusion=diffusion,
+    )
+
+    expected += ou_transition_log_density(
+        current_state=path[0],
+        next_state=path[1],
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    expected += ou_transition_log_density(
+        current_state=path[1],
+        next_state=path[2],
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    assert observed == pytest.approx(expected)
+
+
+def test_equilibrium_path_log_ratio_is_zero():
+    path = np.array(
+        [
+            [0.2, -0.3],
+            [1.1, 0.4],
+            [-0.5, 0.7],
+            [0.9, -0.2],
+        ],
+        dtype=float,
+    )
+
+    log_ratio = ou_path_log_ratio(
+        path=path,
+        k=1.0,
+        omega=0.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    assert log_ratio == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+
+
+def test_path_log_ratio_changes_sign_under_path_reversal():
+    path = np.array(
+        [
+            [0.2, -0.3],
+            [1.1, 0.4],
+            [-0.5, 0.7],
+            [0.9, -0.2],
+        ],
+        dtype=float,
+    )
+
+    forward_ratio = ou_path_log_ratio(
+        path=path,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    reverse_ratio = ou_path_log_ratio(
+        path=reverse_state_path(path),
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    assert forward_ratio == pytest.approx(
+        -reverse_ratio,
+        abs=1e-12,
+    )
+
+
+def test_path_log_ratio_matches_rotational_increment_identity():
+    path = np.array(
+        [
+            [0.2, -0.4],
+            [0.9, 0.1],
+            [0.5, 0.8],
+            [-0.1, 0.6],
+        ],
+        dtype=float,
+    )
+
+    k = 1.1
+    omega = 0.7
+    diffusion = 0.8
+    dt = 0.2
+
+    observed = ou_path_log_ratio(
+        path=path,
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    decay = np.exp(-k * dt)
+
+    stationary_variance = (
+        diffusion / k
+    )
+
+    one_minus_decay_squared = (
+        -np.expm1(-2.0 * k * dt)
+    )
+
+    coefficient = (
+        2.0
+        * decay
+        * np.sin(omega * dt)
+        / (
+            stationary_variance
+            * one_minus_decay_squared
+        )
+    )
+
+    expected = (
+        coefficient
+        * rotational_increments(path).sum()
+    )
+
+    assert observed == pytest.approx(
+        expected,
+        abs=1e-12,
+    )
+
+
+def test_invalid_state_path_is_rejected():
+    invalid_path = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ]
+    )
+
+    with pytest.raises(ValueError):
+        reverse_state_path(invalid_path)
+
+    with pytest.raises(ValueError):
+        ou_path_log_probability(
+            path=invalid_path,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+        )
 
