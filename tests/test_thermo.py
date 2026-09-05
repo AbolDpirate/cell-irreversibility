@@ -17,6 +17,9 @@ from src.thermo import (
     simulate_rotational_ou,
     stationary_covariance_isotropic,
     stationary_log_density_isotropic,
+    projected_scalar_covariance_matrix,
+    projected_scalar_path_log_ratio,
+    zero_mean_gaussian_log_density,
 )
 
 
@@ -774,6 +777,108 @@ def test_invalid_state_path_is_rejected():
     with pytest.raises(ValueError):
         ou_path_log_probability(
             path=invalid_path,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+        )
+
+def test_projected_scalar_covariance_matches_known_lags():
+    covariance = projected_scalar_covariance_matrix(
+        n_states=3,
+        k=1.0,
+        omega=0.7,
+        diffusion=1.0,
+        dt=0.2,
+    )
+
+    variance = 1.0
+
+    lag_one = (
+        np.exp(-0.2)
+        * np.cos(0.7 * 0.2)
+    )
+
+    lag_two = (
+        np.exp(-0.4)
+        * np.cos(0.7 * 0.4)
+    )
+
+    expected = np.array(
+        [
+            [variance, lag_one, lag_two],
+            [lag_one, variance, lag_one],
+            [lag_two, lag_one, variance],
+        ]
+    )
+
+    np.testing.assert_allclose(
+        covariance,
+        expected,
+    )
+
+
+def test_projected_scalar_covariance_is_invariant_under_time_reversal():
+    covariance = projected_scalar_covariance_matrix(
+        n_states=7,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    reversed_covariance = covariance[
+        ::-1,
+        ::-1,
+    ]
+
+    np.testing.assert_allclose(
+        reversed_covariance,
+        covariance,
+        atol=1e-12,
+    )
+
+
+def test_projected_scalar_path_log_ratio_is_zero_even_when_full_system_is_nonequilibrium():
+    values = np.array(
+        [
+            0.3,
+            1.1,
+            -0.2,
+            0.8,
+            -0.6,
+            0.1,
+        ],
+        dtype=float,
+    )
+
+    log_ratio = projected_scalar_path_log_ratio(
+        values=values,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+    )
+
+    assert log_ratio == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+
+
+def test_invalid_projected_scalar_inputs_are_rejected():
+    with pytest.raises(ValueError):
+        projected_scalar_covariance_matrix(
+            n_states=1,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+        )
+
+    with pytest.raises(ValueError):
+        projected_scalar_path_log_ratio(
+            values=np.array([1.0]),
             k=1.0,
             omega=1.0,
             diffusion=1.0,

@@ -736,3 +736,168 @@ def ou_path_log_ratio(
         - reversed_log_probability
     )
 
+def projected_scalar_covariance_matrix(
+    n_states: int,
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+) -> np.ndarray:
+    """Return the exact covariance matrix of one observed Cartesian coordinate.
+
+    For either x or y of the stationary isotropic rotational OU process,
+
+        Cov[X_t, X_{t+m}]
+        = (D / k)
+          * exp(-k * |m| * dt)
+          * cos(omega * |m| * dt).
+
+    The one-coordinate process is generally not first-order Markov,
+    so this full covariance matrix is used instead of a one-step
+    transition approximation.
+    """
+    if (
+        isinstance(n_states, bool)
+        or not isinstance(n_states, (int, np.integer))
+        or n_states < 2
+    ):
+        raise ValueError(
+            "n_states must be an integer of at least 2."
+        )
+
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if diffusion <= 0:
+        raise ValueError("diffusion must be positive.")
+
+    if dt <= 0:
+        raise ValueError("dt must be positive.")
+
+    indices = np.arange(n_states)
+
+    lag_matrix = np.abs(
+        indices[:, None] - indices[None, :]
+    )
+
+    lag_times = lag_matrix * dt
+
+    stationary_variance = diffusion / k
+
+    return (
+        stationary_variance
+        * np.exp(-k * lag_times)
+        * np.cos(omega * lag_times)
+    )
+
+
+def zero_mean_gaussian_log_density(
+    values: np.ndarray,
+    covariance: np.ndarray,
+) -> float:
+    """Return the log density of a zero-mean multivariate Gaussian."""
+    values_array = np.asarray(
+        values,
+        dtype=float,
+    )
+
+    covariance_array = np.asarray(
+        covariance,
+        dtype=float,
+    )
+
+    if values_array.ndim != 1:
+        raise ValueError("values must be a one-dimensional array.")
+
+    if covariance_array.shape != (
+        values_array.size,
+        values_array.size,
+    ):
+        raise ValueError(
+            "covariance shape must match the number of values."
+        )
+
+    if (
+        not np.all(np.isfinite(values_array))
+        or not np.all(np.isfinite(covariance_array))
+    ):
+        raise ValueError(
+            "values and covariance must contain only finite values."
+        )
+
+    sign, log_determinant = np.linalg.slogdet(
+        covariance_array
+    )
+
+    if sign <= 0:
+        raise ValueError(
+            "covariance must be positive definite."
+        )
+
+    solved = np.linalg.solve(
+        covariance_array,
+        values_array,
+    )
+
+    quadratic = values_array @ solved
+
+    dimension = values_array.size
+
+    return float(
+        -0.5
+        * (
+            dimension * np.log(2.0 * np.pi)
+            + log_determinant
+            + quadratic
+        )
+    )
+
+
+def projected_scalar_path_log_ratio(
+    values: np.ndarray,
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+) -> float:
+    """Return the exact forward/reverse log ratio after hiding one coordinate.
+
+    The observed scalar path is evaluated using its full stationary
+    multivariate-Gaussian distribution, not a false first-order
+    Markov approximation.
+    """
+    values_array = np.asarray(
+        values,
+        dtype=float,
+    )
+
+    if values_array.ndim != 1 or values_array.size < 2:
+        raise ValueError(
+            "values must be a one-dimensional path with at least two states."
+        )
+
+    if not np.all(np.isfinite(values_array)):
+        raise ValueError(
+            "values must contain only finite values."
+        )
+
+    covariance = projected_scalar_covariance_matrix(
+        n_states=values_array.size,
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    forward = zero_mean_gaussian_log_density(
+        values=values_array,
+        covariance=covariance,
+    )
+
+    reverse = zero_mean_gaussian_log_density(
+        values=values_array[::-1],
+        covariance=covariance,
+    )
+
+    return float(forward - reverse)
+
