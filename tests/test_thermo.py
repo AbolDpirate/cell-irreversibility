@@ -23,6 +23,7 @@ from src.thermo import (
     donsker_varadhan_lower_bound,
     make_quadratic_logistic_critic,
     stable_log_mean_exp,
+    evaluate_grouped_dv_critic,
 )
 
 
@@ -1019,5 +1020,193 @@ def test_invalid_dv_inputs_are_rejected():
             reverse_scores=np.array(
                 [0.0, 1.0]
             ),
+        )
+
+
+def test_grouped_dv_evaluator_has_zero_group_leakage_and_balanced_test_labels():
+    forward = np.array(
+        [
+            [1.0, 0.0],
+            [1.1, 0.1],
+            [0.9, -0.1],
+            [1.2, 0.2],
+            [0.8, -0.2],
+            [1.05, 0.05],
+        ],
+        dtype=float,
+    )
+
+    reverse = -forward
+
+    groups = np.array(
+        [0, 1, 2, 3, 4, 5]
+    )
+
+    result = evaluate_grouped_dv_critic(
+        forward_array=forward,
+        reverse_array=reverse,
+        groups=groups,
+        n_splits=3,
+    )
+
+    assert len(result) == 3
+
+    assert (
+        result["group_overlap"] == 0
+    ).all()
+
+    assert (
+        result["n_test_forward"]
+        == result["n_test_reverse"]
+    ).all()
+
+
+def test_grouped_dv_evaluator_uses_expected_three_fold_structure():
+    forward = np.array(
+        [
+            [1.0],
+            [2.0],
+            [3.0],
+            [4.0],
+            [5.0],
+            [6.0],
+        ],
+        dtype=float,
+    )
+
+    reverse = -forward
+
+    groups = np.arange(6)
+
+    result = evaluate_grouped_dv_critic(
+        forward_array=forward,
+        reverse_array=reverse,
+        groups=groups,
+        n_splits=3,
+    )
+
+    np.testing.assert_array_equal(
+        result["fold"].to_numpy(),
+        np.array([1, 2, 3]),
+    )
+
+    assert (
+        result["n_test_groups"] == 2
+    ).all()
+
+
+def test_identical_forward_reverse_distributions_give_zero_grouped_dv():
+    forward = np.array(
+        [
+            [-1.0],
+            [-0.5],
+            [0.0],
+            [0.5],
+            [1.0],
+            [1.5],
+        ],
+        dtype=float,
+    )
+
+    reverse = forward.copy()
+
+    groups = np.arange(6)
+
+    result = evaluate_grouped_dv_critic(
+        forward_array=forward,
+        reverse_array=reverse,
+        groups=groups,
+        n_splits=3,
+    )
+
+    np.testing.assert_allclose(
+        result["dv_raw"].to_numpy(),
+        np.zeros(3),
+        atol=1e-12,
+    )
+
+    np.testing.assert_allclose(
+        result["dv_clipped"].to_numpy(),
+        np.zeros(3),
+        atol=1e-12,
+    )
+
+
+def test_separable_forward_reverse_toy_data_give_positive_grouped_dv():
+    forward = np.array(
+        [
+            [2.0],
+            [2.1],
+            [1.9],
+            [2.2],
+            [1.8],
+            [2.05],
+        ],
+        dtype=float,
+    )
+
+    reverse = np.array(
+        [
+            [-2.0],
+            [-2.1],
+            [-1.9],
+            [-2.2],
+            [-1.8],
+            [-2.05],
+        ],
+        dtype=float,
+    )
+
+    groups = np.arange(6)
+
+    result = evaluate_grouped_dv_critic(
+        forward_array=forward,
+        reverse_array=reverse,
+        groups=groups,
+        n_splits=3,
+    )
+
+    assert (
+        result["dv_raw"] > 0.0
+    ).all()
+
+
+def test_grouped_dv_evaluator_rejects_shape_mismatch():
+    forward = np.ones(
+        (6, 2)
+    )
+
+    reverse = np.ones(
+        (5, 2)
+    )
+
+    groups = np.arange(6)
+
+    with pytest.raises(ValueError):
+        evaluate_grouped_dv_critic(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            n_splits=3,
+        )
+
+
+def test_grouped_dv_evaluator_rejects_too_few_groups():
+    forward = np.ones(
+        (4, 2)
+    )
+
+    reverse = -forward
+
+    groups = np.array(
+        [0, 0, 1, 1]
+    )
+
+    with pytest.raises(ValueError):
+        evaluate_grouped_dv_critic(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            n_splits=3,
         )
 

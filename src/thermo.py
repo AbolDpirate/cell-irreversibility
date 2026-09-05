@@ -6,6 +6,11 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+import pandas as pd
+
+from sklearn.model_selection import GroupKFold
+
+from src.classification import build_classification_dataset
 
 
 def rotation_generator() -> np.ndarray:
@@ -1029,5 +1034,195 @@ def make_quadratic_logistic_critic() -> Pipeline:
                 ),
             ),
         ]
+    )
+
+def evaluate_grouped_dv_critic(
+    forward_array: np.ndarray,
+    reverse_array: np.ndarray,
+    groups: np.ndarray,
+    n_splits: int = 3,
+) -> pd.DataFrame:
+    """Evaluate the fixed Phase 9 DV critic on held-out trajectory groups.
+
+    Forward and reversed examples are combined into a balanced binary
+    classification dataset.
+
+    GroupKFold is applied using trajectory identity, so all examples
+    from a trajectory remain entirely in either the training or the
+    held-out fold.
+
+    For each fold:
+
+    1. fit the fixed quadratic-logistic critic on training groups;
+    2. obtain critic scores on held-out examples only;
+    3. separate held-out forward and reverse scores;
+    4. evaluate the held-out Donsker-Varadhan estimate.
+
+    Returns both the raw finite-sample DV estimate and its nonnegative
+    clipped summary.
+    """
+    forward = np.asarray(
+        forward_array,
+        dtype=float,
+    )
+
+    reverse = np.asarray(
+        reverse_array,
+        dtype=float,
+    )
+
+    groups_array = np.asarray(groups)
+
+    if forward.ndim != 2:
+        raise ValueError(
+            "forward_array must be two-dimensional."
+        )
+
+    if reverse.ndim != 2:
+        raise ValueError(
+            "reverse_array must be two-dimensional."
+        )
+
+    if forward.shape != reverse.shape:
+        raise ValueError(
+            "forward_array and reverse_array must have identical shapes."
+        )
+
+    if forward.shape[0] == 0:
+        raise ValueError(
+            "forward_array and reverse_array must not be empty."
+        )
+
+    if forward.shape[1] == 0:
+        raise ValueError(
+            "arrays must contain at least one feature."
+        )
+
+    if (
+        not np.all(np.isfinite(forward))
+        or not np.all(np.isfinite(reverse))
+    ):
+        raise ValueError(
+            "forward and reverse arrays must contain only finite values."
+        )
+
+    if groups_array.ndim != 1:
+        raise ValueError(
+            "groups must be one-dimensional."
+        )
+
+    if groups_array.shape[0] != forward.shape[0]:
+        raise ValueError(
+            "groups must contain one entry per forward/reverse pair."
+        )
+
+    if pd.isna(groups_array).any():
+        raise ValueError(
+            "groups must not contain missing values."
+        )
+
+    if (
+        isinstance(n_splits, bool)
+        or not isinstance(n_splits, (int, np.integer))
+        or n_splits < 2
+    ):
+        raise ValueError(
+            "n_splits must be an integer of at least 2."
+        )
+
+    unique_groups = np.unique(groups_array)
+
+    if unique_groups.size < n_splits:
+        raise ValueError(
+            "number of unique groups must be at least n_splits."
+        )
+
+    X, y, doubled_groups = build_classification_dataset(
+        forward_array=forward,
+        reverse_array=reverse,
+        cell_ids=groups_array,
+    )
+
+    cv = GroupKFold(
+        n_splits=n_splits,
+    )
+
+    fold_rows = []
+
+    for fold_number, (
+        train_indices,
+        test_indices,
+    ) in enumerate(
+        cv.split(
+            X,
+            y,
+            groups=doubled_groups,
+        ),
+        start=1,
+    ):
+        train_groups = np.unique(
+            doubled_groups[train_indices]
+        )
+
+        test_groups = np.unique(
+            doubled_groups[test_indices]
+        )
+
+        overlap = np.intersect1d(
+            train_groups,
+            test_groups,
+        )
+
+        if overlap.size != 0:
+            raise RuntimeError(
+                "Group leakage detected between training and held-out data."
+            )
+
+        critic = make_quadratic_logistic_critic()
+
+        critic.fit(
+            X[train_indices],
+            y[train_indices],
+        )
+
+        held_out_scores = critic.decision_function(
+            X[test_indices]
+        )
+
+        held_out_labels = y[test_indices]
+
+        forward_scores = held_out_scores[
+            held_out_labels == 1
+        ]
+
+        reverse_scores = held_out_scores[
+            held_out_labels == 0
+        ]
+
+        dv_raw = donsker_varadhan_lower_bound(
+            forward_scores=forward_scores,
+            reverse_scores=reverse_scores,
+        )
+
+        fold_rows.append(
+            {
+                "fold": fold_number,
+                "n_train_examples": train_indices.size,
+                "n_test_examples": test_indices.size,
+                "n_train_groups": train_groups.size,
+                "n_test_groups": test_groups.size,
+                "n_test_forward": forward_scores.size,
+                "n_test_reverse": reverse_scores.size,
+                "group_overlap": overlap.size,
+                "dv_raw": dv_raw,
+                "dv_clipped": max(
+                    0.0,
+                    dv_raw,
+                ),
+            }
+        )
+
+    return pd.DataFrame(
+        fold_rows
     )
 
