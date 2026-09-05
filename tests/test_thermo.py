@@ -4,13 +4,16 @@ import pytest
 from src.thermo import (
     analytic_epr_rotational_ou,
     analytic_mean_rotational_increment,
+    analytic_sampled_path_irreversibility_rate,
     ou_drift_matrix,
     ou_transition_covariance,
+    ou_transition_log_density,
     ou_transition_matrix,
     rotation_generator,
     rotational_increments,
     simulate_rotational_ou,
     stationary_covariance_isotropic,
+    stationary_log_density_isotropic,
 )
 
 
@@ -443,4 +446,130 @@ def test_invalid_rotational_increment_path_is_rejected():
         rotational_increments(
             np.array([[1.0, np.nan], [2.0, 3.0]])
         )
+
+def test_stationary_log_density_at_origin_matches_known_gaussian():
+    log_density = stationary_log_density_isotropic(
+        state=np.array([0.0, 0.0]),
+        k=1.0,
+        diffusion=1.0,
+    )
+
+    expected = -np.log(2.0 * np.pi)
+
+    assert log_density == pytest.approx(expected)
+
+
+def test_transition_log_density_is_maximal_at_exact_conditional_mean():
+    k = 1.0
+    omega = 0.8
+    diffusion = 0.7
+    dt = 0.2
+
+    current = np.array(
+        [0.4, -1.1],
+        dtype=float,
+    )
+
+    transition = ou_transition_matrix(
+        k=k,
+        omega=omega,
+        dt=dt,
+    )
+
+    conditional_mean = (
+        transition @ current
+    )
+
+    transition_covariance = (
+        ou_transition_covariance(
+            k=k,
+            diffusion=diffusion,
+            dt=dt,
+        )
+    )
+
+    variance = transition_covariance[0, 0]
+
+    observed = ou_transition_log_density(
+        current_state=current,
+        next_state=conditional_mean,
+        k=k,
+        omega=omega,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    expected = -np.log(
+        2.0 * np.pi * variance
+    )
+
+    assert observed == pytest.approx(expected)
+
+
+def test_sampled_irreversibility_rate_is_zero_at_equilibrium():
+    rate = analytic_sampled_path_irreversibility_rate(
+        k=1.0,
+        omega=0.0,
+        dt=0.1,
+    )
+
+    assert rate == pytest.approx(0.0)
+
+
+def test_sampled_irreversibility_rate_is_independent_of_rotation_direction():
+    positive = analytic_sampled_path_irreversibility_rate(
+        k=1.0,
+        omega=1.2,
+        dt=0.1,
+    )
+
+    negative = analytic_sampled_path_irreversibility_rate(
+        k=1.0,
+        omega=-1.2,
+        dt=0.1,
+    )
+
+    assert positive == pytest.approx(negative)
+
+
+def test_sampled_irreversibility_rate_approaches_continuous_epr():
+    k = 1.0
+    omega = 1.0
+    dt = 1e-6
+
+    sampled = analytic_sampled_path_irreversibility_rate(
+        k=k,
+        omega=omega,
+        dt=dt,
+    )
+
+    continuous = analytic_epr_rotational_ou(
+        k=k,
+        omega=omega,
+    )
+
+    assert sampled == pytest.approx(
+        continuous,
+        rel=1e-5,
+    )
+
+
+def test_finite_sampling_reduces_observable_irreversibility():
+    k = 1.0
+    omega = 1.0
+    dt = 0.1
+
+    sampled = analytic_sampled_path_irreversibility_rate(
+        k=k,
+        omega=omega,
+        dt=dt,
+    )
+
+    continuous = analytic_epr_rotational_ou(
+        k=k,
+        omega=omega,
+    )
+
+    assert sampled > 0.0
+    assert sampled < continuous
 

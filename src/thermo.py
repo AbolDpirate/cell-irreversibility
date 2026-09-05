@@ -399,3 +399,174 @@ def analytic_mean_rotational_increment(
         * np.sin(omega * dt)
     )
 
+
+def stationary_log_density_isotropic(
+    state: np.ndarray,
+    k: float,
+    diffusion: float,
+) -> float:
+    """Return the stationary log density of a 2D isotropic OU state.
+
+    The stationary covariance is
+
+        C = (D / k) I.
+
+    Therefore the stationary distribution is
+
+        N(0, C).
+    """
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if diffusion <= 0:
+        raise ValueError("diffusion must be positive.")
+
+    state_array = np.asarray(
+        state,
+        dtype=float,
+    )
+
+    if state_array.shape != (2,):
+        raise ValueError("state must have shape (2,).")
+
+    if not np.all(np.isfinite(state_array)):
+        raise ValueError("state must contain only finite values.")
+
+    variance = diffusion / k
+
+    quadratic = (
+        state_array @ state_array
+        / variance
+    )
+
+    return float(
+        -np.log(2.0 * np.pi * variance)
+        - 0.5 * quadratic
+    )
+
+
+def ou_transition_log_density(
+    current_state: np.ndarray,
+    next_state: np.ndarray,
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+) -> float:
+    """Return the exact OU transition log density.
+
+    Computes
+
+        log p(X_{t+dt} = next_state | X_t = current_state)
+
+    using the exact Gaussian finite-time transition law.
+    """
+    current = np.asarray(
+        current_state,
+        dtype=float,
+    )
+
+    following = np.asarray(
+        next_state,
+        dtype=float,
+    )
+
+    if current.shape != (2,):
+        raise ValueError(
+            "current_state must have shape (2,)."
+        )
+
+    if following.shape != (2,):
+        raise ValueError(
+            "next_state must have shape (2,)."
+        )
+
+    if (
+        not np.all(np.isfinite(current))
+        or not np.all(np.isfinite(following))
+    ):
+        raise ValueError(
+            "states must contain only finite values."
+        )
+
+    transition = ou_transition_matrix(
+        k=k,
+        omega=omega,
+        dt=dt,
+    )
+
+    transition_covariance = ou_transition_covariance(
+        k=k,
+        diffusion=diffusion,
+        dt=dt,
+    )
+
+    variance = transition_covariance[0, 0]
+
+    residual = (
+        following
+        - transition @ current
+    )
+
+    quadratic = (
+        residual @ residual
+        / variance
+    )
+
+    return float(
+        -np.log(2.0 * np.pi * variance)
+        - 0.5 * quadratic
+    )
+
+
+def analytic_sampled_path_irreversibility_rate(
+    k: float,
+    omega: float,
+    dt: float,
+) -> float:
+    """Return the exact irreversibility rate of the sampled OU chain.
+
+    For observations separated by dt, the stationary forward/reverse
+    path-space KL rate is
+
+        4 exp(-2 k dt) sin^2(omega dt)
+        --------------------------------
+        (1 - exp(-2 k dt)) dt
+
+    in nats per simulation-time unit.
+
+    As dt -> 0, this approaches the continuous-time physical EPR
+
+        2 omega^2 / k.
+
+    At finite dt this is a sampled path-space irreversibility rate,
+    not the continuous-time physical entropy-production rate.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if dt <= 0:
+        raise ValueError("dt must be positive.")
+
+    decay_squared = np.exp(
+        -2.0 * k * dt
+    )
+
+    one_minus_decay_squared = (
+        -np.expm1(-2.0 * k * dt)
+    )
+
+    numerator = (
+        4.0
+        * decay_squared
+        * np.sin(omega * dt) ** 2
+    )
+
+    denominator = (
+        one_minus_decay_squared
+        * dt
+    )
+
+    return float(
+        numerator / denominator
+    )
