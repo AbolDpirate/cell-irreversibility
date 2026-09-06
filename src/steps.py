@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import pandas as pd
+import numpy as np
 
 
 REQUIRED_TRACK_COLS = {"cell_id", "frame", "t_min", "x_um", "y_um"}
@@ -196,3 +197,165 @@ def summary_by_tau(steps_all: pd.DataFrame) -> pd.DataFrame:
                         .reset_index()
               )
     return summary
+
+
+def compute_framewise_common_motion(
+    tracks,
+):
+    """Estimate frame-wise population common motion.
+
+    Exact one-frame displacements are grouped by physical frame
+    transition. Common dx and dy are the component-wise medians
+    across contributing cells.
+    """
+    one_frame_steps = compute_steps_for_tau(
+        tracks,
+        tau_frames=1,
+    )
+
+    common_motion = (
+        one_frame_steps
+        .groupby(
+            [
+                "frame_start",
+                "frame_end",
+            ],
+            as_index=False,
+        )
+        .agg(
+            common_dx_um=(
+                "dx_um",
+                "median",
+            ),
+            common_dy_um=(
+                "dy_um",
+                "median",
+            ),
+            n_cells=(
+                "cell_id",
+                "nunique",
+            ),
+        )
+        .sort_values(
+            "frame_start"
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+    return common_motion
+
+
+def make_comoving_tracks(
+    tracks,
+    common_motion,
+):
+    """Subtract cumulative frame-wise population common motion.
+
+    Frame 0 receives zero cumulative correction.
+
+    The returned table preserves:
+        cell_id
+        frame
+        t_min
+        x_um
+        y_um
+    """
+    frame_correction = pd.DataFrame(
+        {
+            "frame": [0],
+            "common_x_um": [0.0],
+            "common_y_um": [0.0],
+        }
+    )
+
+    transition_correction = pd.DataFrame(
+        {
+            "frame":
+                common_motion[
+                    "frame_end"
+                ].to_numpy(),
+
+            "common_x_um":
+                np.cumsum(
+                    common_motion[
+                        "common_dx_um"
+                    ].to_numpy()
+                ),
+
+            "common_y_um":
+                np.cumsum(
+                    common_motion[
+                        "common_dy_um"
+                    ].to_numpy()
+                ),
+        }
+    )
+
+    frame_correction = pd.concat(
+        [
+            frame_correction,
+            transition_correction,
+        ],
+        ignore_index=True,
+    )
+
+    result = (
+        tracks
+        .merge(
+            frame_correction,
+            on="frame",
+            how="left",
+            validate="many_to_one",
+        )
+        .copy()
+    )
+
+    if (
+        result[
+            [
+                "common_x_um",
+                "common_y_um",
+            ]
+        ]
+        .isna()
+        .any()
+        .any()
+    ):
+        raise RuntimeError(
+            "Missing cumulative common-motion "
+            "correction for one or more frames."
+        )
+
+    result["x_um"] = (
+        result["x_um"]
+        - result["common_x_um"]
+    )
+
+    result["y_um"] = (
+        result["y_um"]
+        - result["common_y_um"]
+    )
+
+    return (
+        result[
+            [
+                "cell_id",
+                "frame",
+                "t_min",
+                "x_um",
+                "y_um",
+            ]
+        ]
+        .sort_values(
+            [
+                "cell_id",
+                "frame",
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+

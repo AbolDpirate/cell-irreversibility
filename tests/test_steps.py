@@ -1,5 +1,6 @@
 """Unit tests for displacement-step calculations."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -7,6 +8,8 @@ from src.steps import (
     compute_steps_for_tau,
     compute_steps_multi_tau,
     summary_by_tau,
+    compute_framewise_common_motion,
+    make_comoving_tracks,
 )
 
 
@@ -144,3 +147,155 @@ def test_duplicate_cell_frame_raises_error() -> None:
             duplicate_tracks,
             tau_frames=1,
         )
+
+def test_framewise_common_motion_uses_componentwise_medians():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [1, 1, 2, 2, 3, 3],
+            "frame": [0, 1, 0, 1, 0, 1],
+            "t_min": [0, 20, 0, 20, 0, 20],
+            "x_um": [0.0, 1.0, 0.0, 3.0, 0.0, 100.0],
+            "y_um": [0.0, 2.0, 0.0, 4.0, 0.0, -50.0],
+        }
+    )
+
+    common = compute_framewise_common_motion(
+        tracks
+    )
+
+    assert len(common) == 1
+
+    assert common.loc[
+        0,
+        "common_dx_um",
+    ] == pytest.approx(3.0)
+
+    assert common.loc[
+        0,
+        "common_dy_um",
+    ] == pytest.approx(2.0)
+
+    assert common.loc[
+        0,
+        "n_cells",
+    ] == 3
+
+
+def test_comoving_tracks_remove_known_common_translation():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [
+                1, 1, 1,
+                2, 2, 2,
+            ],
+            "frame": [
+                0, 1, 2,
+                0, 1, 2,
+            ],
+            "t_min": [
+                0, 20, 40,
+                0, 20, 40,
+            ],
+            "x_um": [
+                0.0, 1.0, 2.0,
+                10.0, 11.0, 12.0,
+            ],
+            "y_um": [
+                0.0, -2.0, -4.0,
+                5.0, 3.0, 1.0,
+            ],
+        }
+    )
+
+    common = compute_framewise_common_motion(
+        tracks
+    )
+
+    comoving = make_comoving_tracks(
+        tracks,
+        common,
+    )
+
+    cell_1 = (
+        comoving[
+            comoving["cell_id"] == 1
+        ]
+        .sort_values("frame")
+    )
+
+    cell_2 = (
+        comoving[
+            comoving["cell_id"] == 2
+        ]
+        .sort_values("frame")
+    )
+
+    np.testing.assert_allclose(
+        cell_1["x_um"],
+        np.array([0.0, 0.0, 0.0]),
+    )
+
+    np.testing.assert_allclose(
+        cell_1["y_um"],
+        np.array([0.0, 0.0, 0.0]),
+    )
+
+    np.testing.assert_allclose(
+        cell_2["x_um"],
+        np.array([10.0, 10.0, 10.0]),
+    )
+
+    np.testing.assert_allclose(
+        cell_2["y_um"],
+        np.array([5.0, 5.0, 5.0]),
+    )
+
+
+def test_comoving_tracks_preserve_identity_frame_and_time():
+    tracks = pd.DataFrame(
+        {
+            "cell_id": [1, 1, 2, 2],
+            "frame": [0, 1, 0, 1],
+            "t_min": [0, 20, 0, 20],
+            "x_um": [0.0, 1.0, 5.0, 6.0],
+            "y_um": [0.0, 2.0, 4.0, 6.0],
+        }
+    )
+
+    common = compute_framewise_common_motion(
+        tracks
+    )
+
+    comoving = make_comoving_tracks(
+        tracks,
+        common,
+    )
+
+    expected_metadata = (
+        tracks[
+            [
+                "cell_id",
+                "frame",
+                "t_min",
+            ]
+        ]
+        .sort_values(
+            [
+                "cell_id",
+                "frame",
+            ]
+        )
+        .reset_index(drop=True)
+    )
+
+    pd.testing.assert_frame_equal(
+        comoving[
+            [
+                "cell_id",
+                "frame",
+                "t_min",
+            ]
+        ],
+        expected_metadata,
+    )
+
