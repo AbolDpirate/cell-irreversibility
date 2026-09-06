@@ -27,6 +27,7 @@ from src.thermo import (
     evaluate_grouped_dv_critic,
     build_grouped_ou_path_samples,
     summarize_grouped_dv,
+    evaluate_paired_orientation_dv_null,
 )
 
 
@@ -1379,5 +1380,208 @@ def test_grouped_ou_path_samples_reject_invalid_block_length():
             diffusion=1.0,
             dt=0.1,
             seed=2031,
+        )
+
+def test_paired_orientation_dv_null_returns_expected_replicate_count():
+    forward = np.array(
+        [
+            [2.0],
+            [2.1],
+            [1.9],
+            [2.2],
+            [1.8],
+            [2.05],
+        ],
+        dtype=float,
+    )
+
+    reverse = -forward
+
+    groups = np.arange(6)
+
+    observed, null_results = (
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=1.0,
+            n_replicates=5,
+            seed=2032,
+            n_splits=3,
+        )
+    )
+
+    assert len(null_results) == 5
+
+    np.testing.assert_array_equal(
+        null_results[
+            "replicate"
+        ].to_numpy(),
+        np.arange(1, 6),
+    )
+
+    assert np.isfinite(
+        observed["clipped_rate"]
+    )
+
+
+def test_paired_orientation_dv_null_is_reproducible_for_fixed_seed():
+    forward = np.array(
+        [
+            [1.5],
+            [1.7],
+            [1.4],
+            [1.8],
+            [1.3],
+            [1.6],
+        ],
+        dtype=float,
+    )
+
+    reverse = -forward
+
+    groups = np.arange(6)
+
+    observed_a, null_a = (
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=2.0,
+            n_replicates=5,
+            seed=2032,
+            n_splits=3,
+        )
+    )
+
+    observed_b, null_b = (
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=2.0,
+            n_replicates=5,
+            seed=2032,
+            n_splits=3,
+        )
+    )
+
+    pd.testing.assert_frame_equal(
+        null_a,
+        null_b,
+    )
+
+    assert observed_a == observed_b
+
+
+def test_paired_orientation_null_preserves_pair_count():
+    forward = np.array(
+        [
+            [1.0],
+            [2.0],
+            [3.0],
+            [4.0],
+            [5.0],
+            [6.0],
+        ],
+        dtype=float,
+    )
+
+    reverse = -forward
+
+    groups = np.arange(6)
+
+    _, null_results = (
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=1.0,
+            n_replicates=7,
+            seed=2032,
+            n_splits=3,
+        )
+    )
+
+    assert (
+        null_results["n_swapped"]
+        >= 0
+    ).all()
+
+    assert (
+        null_results["n_swapped"]
+        <= len(forward)
+    ).all()
+
+
+def test_paired_orientation_null_uses_clipped_nonnegative_rate():
+    forward = np.array(
+        [
+            [-1.0],
+            [-0.5],
+            [0.0],
+            [0.5],
+            [1.0],
+            [1.5],
+        ],
+        dtype=float,
+    )
+
+    reverse = forward.copy()
+
+    groups = np.arange(6)
+
+    observed, null_results = (
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=2.0,
+            n_replicates=5,
+            seed=2032,
+            n_splits=3,
+        )
+    )
+
+    assert observed[
+        "clipped_rate"
+    ] >= 0.0
+
+    assert (
+        null_results[
+            "clipped_rate"
+        ] >= 0.0
+    ).all()
+
+
+def test_paired_orientation_dv_null_rejects_invalid_arguments():
+    forward = np.ones(
+        (6, 1)
+    )
+
+    reverse = -forward
+
+    groups = np.arange(6)
+
+    with pytest.raises(ValueError):
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=0.0,
+            n_replicates=5,
+            seed=2032,
+            n_splits=3,
+        )
+
+    with pytest.raises(ValueError):
+        evaluate_paired_orientation_dv_null(
+            forward_array=forward,
+            reverse_array=reverse,
+            groups=groups,
+            path_duration=1.0,
+            n_replicates=0,
+            seed=2032,
+            n_splits=3,
         )
 

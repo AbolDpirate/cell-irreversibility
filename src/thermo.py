@@ -10,7 +10,11 @@ import pandas as pd
 
 from sklearn.model_selection import GroupKFold
 
-from src.classification import build_classification_dataset
+from src.classification import (
+    build_classification_dataset,
+    empirical_upper_pvalue,
+    randomize_pair_orientation,
+)
 
 
 def rotation_generator() -> np.ndarray:
@@ -1463,4 +1467,203 @@ def summarize_grouped_dv(
             max(0.0, weighted_raw)
         ),
     }
+
+def evaluate_paired_orientation_dv_null(
+    forward_array: np.ndarray,
+    reverse_array: np.ndarray,
+    groups: np.ndarray,
+    path_duration: float,
+    n_replicates: int = 200,
+    seed: int = 2032,
+    n_splits: int = 3,
+) -> tuple[dict[str, float], pd.DataFrame]:
+    """Evaluate observed grouped DV and a paired orientation null.
+
+    The observed statistic is the weighted held-out grouped DV estimate.
+
+    For each null replicate, temporal orientation is randomized within
+    each exact forward/reverse pair while preserving trajectory identity.
+    The same grouped cross-validation procedure is then repeated.
+
+    Both raw and nonnegative clipped DV estimates are retained.
+
+    The named experimental rate is
+
+        max(0, weighted held-out DV) / path_duration.
+
+    Null calibration and the empirical upper-tail p-value use this same
+    clipped nonnegative rate statistic.
+
+    Parameters
+    ----------
+    forward_array, reverse_array
+        Matched forward/reversed path feature arrays.
+    groups
+        One trajectory identity per forward/reverse pair.
+    path_duration
+        Physical or simulation duration represented by each path.
+    n_replicates
+        Number of paired-orientation null replicates.
+    seed
+        Random seed for null orientation randomization.
+    n_splits
+        Number of GroupKFold splits.
+
+    Returns
+    -------
+    observed_summary
+        Dictionary containing observed raw/clipped DV, rates, null q95,
+        empirical p-value, and above-null flag.
+    null_results
+        DataFrame containing replicate-level raw/clipped DV and rates.
+    """
+    if path_duration <= 0:
+        raise ValueError(
+            "path_duration must be positive."
+        )
+
+    if (
+        isinstance(n_replicates, bool)
+        or not isinstance(
+            n_replicates,
+            (int, np.integer),
+        )
+        or n_replicates < 1
+    ):
+        raise ValueError(
+            "n_replicates must be a positive integer."
+        )
+
+    observed_folds = evaluate_grouped_dv_critic(
+        forward_array=forward_array,
+        reverse_array=reverse_array,
+        groups=groups,
+        n_splits=n_splits,
+    )
+
+    observed_dv = summarize_grouped_dv(
+        observed_folds
+    )
+
+    observed_raw_rate = (
+        observed_dv["dv_raw"]
+        / path_duration
+    )
+
+    observed_clipped_rate = (
+        observed_dv["dv_clipped"]
+        / path_duration
+    )
+
+    rng = np.random.default_rng(
+        seed
+    )
+
+    null_rows = []
+
+    for replicate in range(
+        1,
+        n_replicates + 1,
+    ):
+        swap_mask = (
+            rng.random(
+                len(forward_array)
+            )
+            < 0.5
+        )
+
+        pseudo_forward, pseudo_reverse = (
+            randomize_pair_orientation(
+                forward_array=forward_array,
+                reverse_array=reverse_array,
+                swap_mask=swap_mask,
+            )
+        )
+
+        null_folds = evaluate_grouped_dv_critic(
+            forward_array=pseudo_forward,
+            reverse_array=pseudo_reverse,
+            groups=groups,
+            n_splits=n_splits,
+        )
+
+        null_dv = summarize_grouped_dv(
+            null_folds
+        )
+
+        null_rows.append(
+            {
+                "replicate": replicate,
+                "n_swapped": int(
+                    swap_mask.sum()
+                ),
+                "dv_raw": null_dv[
+                    "dv_raw"
+                ],
+                "dv_clipped": null_dv[
+                    "dv_clipped"
+                ],
+                "raw_rate": (
+                    null_dv["dv_raw"]
+                    / path_duration
+                ),
+                "clipped_rate": (
+                    null_dv["dv_clipped"]
+                    / path_duration
+                ),
+            }
+        )
+
+    null_results = pd.DataFrame(
+        null_rows
+    )
+
+    null_clipped_rates = null_results[
+        "clipped_rate"
+    ].to_numpy(
+        dtype=float
+    )
+
+    null_q95 = float(
+        np.quantile(
+            null_clipped_rates,
+            0.95,
+        )
+    )
+
+    empirical_p = float(
+        empirical_upper_pvalue(
+            observed=observed_clipped_rate,
+            null_values=null_clipped_rates,
+        )
+    )
+
+    observed_summary = {
+        "dv_raw": float(
+            observed_dv["dv_raw"]
+        ),
+        "dv_clipped": float(
+            observed_dv["dv_clipped"]
+        ),
+        "raw_rate": float(
+            observed_raw_rate
+        ),
+        "clipped_rate": float(
+            observed_clipped_rate
+        ),
+        "null_mean_rate": float(
+            null_clipped_rates.mean()
+        ),
+        "null_q95_rate": null_q95,
+        "empirical_p": empirical_p,
+        "above_null_q95": bool(
+            observed_clipped_rate
+            > null_q95
+        ),
+    }
+
+    return (
+        observed_summary,
+        null_results,
+    )
 
