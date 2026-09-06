@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from src.thermo import (
@@ -24,6 +25,8 @@ from src.thermo import (
     make_quadratic_logistic_critic,
     stable_log_mean_exp,
     evaluate_grouped_dv_critic,
+    build_grouped_ou_path_samples,
+    summarize_grouped_dv,
 )
 
 
@@ -1208,5 +1211,173 @@ def test_grouped_dv_evaluator_rejects_too_few_groups():
             reverse_array=reverse,
             groups=groups,
             n_splits=3,
+        )
+
+def test_grouped_ou_path_samples_have_expected_shapes():
+    forward, reverse, groups = (
+        build_grouped_ou_path_samples(
+            n_groups=6,
+            n_steps_per_group=20,
+            path_n_states=4,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+            seed=2031,
+        )
+    )
+
+    # 21 states per trajectory -> 5 complete non-overlapping blocks.
+    # 6 trajectories -> 30 samples.
+    assert forward.shape == (30, 8)
+    assert reverse.shape == (30, 8)
+    assert groups.shape == (30,)
+
+    assert np.unique(groups).size == 6
+
+
+def test_grouped_ou_path_samples_are_reproducible():
+    result_a = build_grouped_ou_path_samples(
+        n_groups=6,
+        n_steps_per_group=20,
+        path_n_states=4,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+        seed=2031,
+    )
+
+    result_b = build_grouped_ou_path_samples(
+        n_groups=6,
+        n_steps_per_group=20,
+        path_n_states=4,
+        k=1.0,
+        omega=1.0,
+        diffusion=1.0,
+        dt=0.1,
+        seed=2031,
+    )
+
+    for array_a, array_b in zip(
+        result_a,
+        result_b,
+    ):
+        np.testing.assert_allclose(
+            array_a,
+            array_b,
+        )
+
+
+def test_grouped_ou_reverse_samples_are_exact_state_reversals():
+    forward, reverse, _ = (
+        build_grouped_ou_path_samples(
+            n_groups=3,
+            n_steps_per_group=12,
+            path_n_states=4,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+            seed=2031,
+        )
+    )
+
+    forward_paths = forward.reshape(
+        -1,
+        4,
+        2,
+    )
+
+    reverse_paths = reverse.reshape(
+        -1,
+        4,
+        2,
+    )
+
+    np.testing.assert_allclose(
+        reverse_paths,
+        forward_paths[:, ::-1, :],
+    )
+
+
+def test_summarize_grouped_dv_uses_weighted_raw_mean():
+    fold_results = pd.DataFrame(
+        {
+            "n_test_forward": [
+                10,
+                20,
+                30,
+            ],
+            "dv_raw": [
+                0.1,
+                -0.1,
+                0.2,
+            ],
+        }
+    )
+
+    summary = summarize_grouped_dv(
+        fold_results
+    )
+
+    expected_raw = np.average(
+        np.array(
+            [0.1, -0.1, 0.2]
+        ),
+        weights=np.array(
+            [10, 20, 30]
+        ),
+    )
+
+    assert summary["dv_raw"] == pytest.approx(
+        expected_raw
+    )
+
+    assert summary[
+        "dv_clipped"
+    ] == pytest.approx(
+        max(0.0, expected_raw)
+    )
+
+
+def test_summarize_grouped_dv_clips_only_after_averaging():
+    fold_results = pd.DataFrame(
+        {
+            "n_test_forward": [
+                1,
+                1,
+            ],
+            "dv_raw": [
+                0.1,
+                -0.3,
+            ],
+        }
+    )
+
+    summary = summarize_grouped_dv(
+        fold_results
+    )
+
+    assert summary["dv_raw"] == pytest.approx(
+        -0.1
+    )
+
+    assert summary["dv_clipped"] == pytest.approx(
+        0.0
+    )
+
+
+def test_grouped_ou_path_samples_reject_invalid_block_length():
+    with pytest.raises(ValueError):
+        build_grouped_ou_path_samples(
+            n_groups=3,
+            n_steps_per_group=2,
+            path_n_states=10,
+            k=1.0,
+            omega=1.0,
+            diffusion=1.0,
+            dt=0.1,
+            seed=2031,
         )
 

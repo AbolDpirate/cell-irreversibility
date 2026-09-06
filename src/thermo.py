@@ -1226,3 +1226,241 @@ def evaluate_grouped_dv_critic(
         fold_rows
     )
 
+def build_grouped_ou_path_samples(
+    n_groups: int,
+    n_steps_per_group: int,
+    path_n_states: int,
+    k: float,
+    omega: float,
+    diffusion: float,
+    dt: float,
+    seed: int = 2031,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build independent grouped forward/reverse OU path samples.
+
+    Each group is generated from an independently seeded stationary OU
+    trajectory.
+
+    Within each trajectory, non-overlapping state blocks are extracted.
+    Each block is flattened into one feature vector.
+
+    Forward and reversed versions of every block receive the same
+    trajectory-group identity.
+
+    Parameters
+    ----------
+    n_groups
+        Number of independently simulated trajectories.
+    n_steps_per_group
+        Number of OU transitions in each trajectory.
+    path_n_states
+        Number of states in each fixed-length path sample.
+    k, omega, diffusion, dt
+        OU model parameters.
+    seed
+        Master reproducibility seed.
+
+    Returns
+    -------
+    forward_array
+        Shape (n_samples, 2 * path_n_states).
+    reverse_array
+        Same shape as forward_array.
+    groups
+        One trajectory-group ID per forward/reverse pair.
+    """
+    if (
+        isinstance(n_groups, bool)
+        or not isinstance(n_groups, (int, np.integer))
+        or n_groups < 1
+    ):
+        raise ValueError(
+            "n_groups must be a positive integer."
+        )
+
+    if (
+        isinstance(n_steps_per_group, bool)
+        or not isinstance(
+            n_steps_per_group,
+            (int, np.integer),
+        )
+        or n_steps_per_group < 1
+    ):
+        raise ValueError(
+            "n_steps_per_group must be a positive integer."
+        )
+
+    if (
+        isinstance(path_n_states, bool)
+        or not isinstance(
+            path_n_states,
+            (int, np.integer),
+        )
+        or path_n_states < 2
+    ):
+        raise ValueError(
+            "path_n_states must be an integer of at least 2."
+        )
+
+    n_states_per_group = (
+        n_steps_per_group + 1
+    )
+
+    n_blocks_per_group = (
+        n_states_per_group
+        // path_n_states
+    )
+
+    if n_blocks_per_group < 1:
+        raise ValueError(
+            "each trajectory must contain at least one complete path block."
+        )
+
+    master_rng = np.random.default_rng(
+        seed
+    )
+
+    child_seeds = master_rng.integers(
+        low=0,
+        high=np.iinfo(np.uint32).max,
+        size=n_groups,
+        dtype=np.uint32,
+    )
+
+    forward_blocks = []
+    reverse_blocks = []
+    group_blocks = []
+
+    usable_state_count = (
+        n_blocks_per_group
+        * path_n_states
+    )
+
+    for group_id, child_seed in enumerate(
+        child_seeds
+    ):
+        trajectory = simulate_rotational_ou(
+            n_steps=n_steps_per_group,
+            k=k,
+            omega=omega,
+            diffusion=diffusion,
+            dt=dt,
+            seed=int(child_seed),
+        )
+
+        usable_states = trajectory[
+            :usable_state_count
+        ]
+
+        blocks = usable_states.reshape(
+            n_blocks_per_group,
+            path_n_states,
+            2,
+        )
+
+        reversed_blocks = blocks[
+            :,
+            ::-1,
+            :,
+        ]
+
+        forward_blocks.append(
+            blocks.reshape(
+                n_blocks_per_group,
+                2 * path_n_states,
+            )
+        )
+
+        reverse_blocks.append(
+            reversed_blocks.reshape(
+                n_blocks_per_group,
+                2 * path_n_states,
+            )
+        )
+
+        group_blocks.append(
+            np.full(
+                n_blocks_per_group,
+                group_id,
+                dtype=int,
+            )
+        )
+
+    forward_array = np.vstack(
+        forward_blocks
+    )
+
+    reverse_array = np.vstack(
+        reverse_blocks
+    )
+
+    groups = np.concatenate(
+        group_blocks
+    )
+
+    return (
+        forward_array,
+        reverse_array,
+        groups,
+    )
+
+def summarize_grouped_dv(
+    fold_results: pd.DataFrame,
+) -> dict[str, float]:
+    """Summarize cross-validated held-out DV estimates.
+
+    Fold-level raw DV estimates are averaged using the number of held-out
+    forward samples as weights.
+
+    The nonnegative summary is obtained by clipping only after the
+    weighted raw mean has been calculated.
+    """
+    required_columns = {
+        "n_test_forward",
+        "dv_raw",
+    }
+
+    missing_columns = (
+        required_columns
+        - set(fold_results.columns)
+    )
+
+    if missing_columns:
+        raise ValueError(
+            "fold_results is missing required columns: "
+            f"{sorted(missing_columns)}"
+        )
+
+    weights = fold_results[
+        "n_test_forward"
+    ].to_numpy(
+        dtype=float
+    )
+
+    raw_values = fold_results[
+        "dv_raw"
+    ].to_numpy(
+        dtype=float
+    )
+
+    if (
+        np.any(weights <= 0)
+        or not np.all(np.isfinite(weights))
+        or not np.all(np.isfinite(raw_values))
+    ):
+        raise ValueError(
+            "fold weights and DV values must be finite, with positive weights."
+        )
+
+    weighted_raw = np.average(
+        raw_values,
+        weights=weights,
+    )
+
+    return {
+        "dv_raw": float(weighted_raw),
+        "dv_clipped": float(
+            max(0.0, weighted_raw)
+        ),
+    }
+
